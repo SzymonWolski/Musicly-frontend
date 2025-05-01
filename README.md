@@ -52,3 +52,8 @@ export default tseslint.config({
   },
 })
 ```
+Żeby włączyć frontend, należy użyć komendy
+```bash
+bun run dev
+```
+w razie jej braku zainstaluj "bun"
