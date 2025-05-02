@@ -10,14 +10,14 @@ const TopBar = () => {
   };
 
   return (
-    <div className="flex items-center justify-between bg-gray-900 text-white p-4">
+    <div className="flex items-center rounded-lg justify-between bg-gray-900 text-white p-4">
       <button
         onClick={handleLoginClick}
         className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition"
       >
         Zaloguj się
       </button>
-      <div>Muscily</div>
+      <div>Musicly</div>
     </div>
   );
 };
