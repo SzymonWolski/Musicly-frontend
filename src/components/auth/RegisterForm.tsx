@@ -4,20 +4,20 @@ import axios from "axios";
 import { ArrowLeft } from "lucide-react";
 
 interface RegisterFormData {
-  username: string;
+  nick: string;
   email: string;
   password: string;
 }
 
 interface BackendErrors {
-  username?: string;
+  nick?: string;
   email?: string;
   [key: string]: string | undefined;
 }
 
 const RegisterForm = () => {
   const [formData, setFormData] = useState<RegisterFormData>({
-    username: "",
+    nick: "",
     email: "",
     password: ""
   });
@@ -46,7 +46,8 @@ const RegisterForm = () => {
     setErrors({});
 
     try {
-      const response = await axios.post("/api/auth/register", formData, {
+      const response = await axios.post("http://localhost:5000/auth/register", formData, {
+        method: "POST",
         headers: {
           'Content-Type': 'application/json'
         }
@@ -97,17 +98,17 @@ const RegisterForm = () => {
           <div>
             <input
               type="text"
-              name="username"
+              name="nick"
               placeholder="Nazwa użytkownika"
-              value={formData.username}
+              value={formData.nick}
               onChange={handleChange}
               className={`w-full p-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 ${
-                errors.username ? "focus:ring-red-500 border-red-500" : "focus:ring-blue-500"
+                errors.nick ? "focus:ring-red-500 border-red-500" : "focus:ring-blue-500"
               }`}
               required
             />
-            {errors.username && (
-              <p className="text-red-500 text-sm mt-1">{errors.username}</p>
+            {errors.nick && (
+              <p className="text-red-500 text-sm mt-1">{errors.nick}</p>
             )}
           </div>
 
