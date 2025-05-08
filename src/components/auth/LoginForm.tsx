@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { ArrowLeft } from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
 
 interface LoginFormData {
   email: string;
@@ -15,6 +16,7 @@ interface BackendErrors {
 }
 
 const LoginForm = () => {
+  const { login } = useAuth();
   const [formData, setFormData] = useState<LoginFormData>({
     email: "",
     password: ""
@@ -51,13 +53,7 @@ const LoginForm = () => {
       });
       
       if (response.data.success) {
-        // Zalogowano pomyślnie - przekieruj do dashboardu
-        navigate("/dashboard", { 
-          state: { 
-            loginSuccess: true,
-            user: response.data.user
-          } 
-        });
+        login(response.data.token, response.data.user);
       }
     } catch (error: any) {
       if (error.response?.data?.errors) {
