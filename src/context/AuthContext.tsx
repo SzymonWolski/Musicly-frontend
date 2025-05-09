@@ -5,6 +5,7 @@ interface User {
   id: string;
   email: string;
   nick: string;
+  isadmin: boolean;
   // Dodaj inne pola, które są potrzebne
 }
 
@@ -14,6 +15,8 @@ interface AuthContextType {
   login: (token: string, userData: User) => void;
   logout: () => void;
   isAuthenticated: boolean;
+  nick: string | null;
+  isadmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -56,6 +59,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     isAuthenticated: !!token,
     login,
     logout,
+    nick: user?.nick || null,
+    isadmin: user?.isadmin || false
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

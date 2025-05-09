@@ -10,6 +10,8 @@ import MessagesPage from "./pages/MessagesPage";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import { AuthProvider } from "./context/AuthContext";
 
+
+
 function App() {
   return (
     <AuthProvider>
@@ -26,7 +28,7 @@ function App() {
           {/* Chronione ścieżki */}
           <Route element={<ProtectedRoute />}>
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/messages" element={<MessagesPage />} />
+            <Route path="/wiadomości" element={<MessagesPage />} />
           </Route>
         </Route>
       </Routes>
