@@ -8,7 +8,7 @@ import { buttonVariants } from "@/components/ui/button"
 
 const TopBar = () => {
   const navigate = useNavigate();
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, logout, isadmin, isAuthenticated } = useAuth();
 
   const handleLoginClick = () => {
     navigate("/login");
@@ -50,10 +50,12 @@ const TopBar = () => {
             Dashboard
         </Link>
         )}
+        {isAuthenticated && user?.isadmin === true && (
         <Link to="/adminPanel" className="flex items-center hover:text-blue-400">
           <LayoutDashboardIcon className="mr-2" />
             Admin Panel
         </Link>
+        )}
       </div>
       
       <div className="text-xl font-bold">Musicly</div>
