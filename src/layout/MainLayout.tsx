@@ -18,14 +18,19 @@ const MainLayout = () => {
           direction="horizontal" 
           className="flex-1 flex h-full overflow-hidden p-2"
         >
-          {/* Warunkowe renderowanie LeftSidebar */}
+          {/* Always render LeftSidebar, but with size 0 for dashboard */}
+          <ResizablePanel 
+            defaultSize={isDashboard ? 0 : 20} 
+            minSize={isDashboard ? 0 : 10} 
+            maxSize={isDashboard ? 0 : 30}
+            collapsible={isDashboard}
+            collapsedSize={0}
+          >
+            {!isDashboard && <LeftSidebar />}
+          </ResizablePanel>
+          
           {!isDashboard && (
-            <>
-              <ResizablePanel defaultSize={20} minSize={10} maxSize={30}>
-                <LeftSidebar />
-              </ResizablePanel>
-              <ResizableHandle className="w-2 bg-black rounded-lg transition-colors" />
-            </>
+            <ResizableHandle className="w-2 bg-black rounded-lg transition-colors" />
           )}
 
           <ResizablePanel defaultSize={isDashboard ? 100 : 60}>

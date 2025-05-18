@@ -45,15 +45,27 @@ const TopBar = () => {
             <span className="hidden md:inline">Wiadomości</span>
         </Link>
         {isAuthenticated && (
-        <Link to="/dashboard" className="flex items-center hover:text-blue-400">
-          <LayoutDashboardIcon className="mr-2" />
-            Dashboard
+        <Link to="/dashboard" 
+            className={cn(buttonVariants(
+                    { 
+                    variant: "ghost", 
+                    className: "w-full justify-start text-white hover:bg-zinc-600"
+                    }
+            ))}>
+          <LayoutDashboardIcon className="mr-2 size-5 " />
+          <span className="hidden md:inline">Dashboard</span>
         </Link>
         )}
         {isAuthenticated && user?.isadmin === true && (
-        <Link to="/adminPanel" className="flex items-center hover:text-blue-400">
-          <LayoutDashboardIcon className="mr-2" />
-            Admin Panel
+        <Link to="/adminPanel" 
+            className={cn(buttonVariants(
+                    { 
+                    variant: "ghost", 
+                    className: "w-full justify-start text-white hover:bg-zinc-600"
+                    }
+            ))}>
+          <LayoutDashboardIcon className="mr-2 size-5 " />
+          <span className="hidden md:inline">Admin Panel</span>
         </Link>
         )}
       </div>
