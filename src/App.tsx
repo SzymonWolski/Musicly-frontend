@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import MessagesPage from "./pages/MessagesPage";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import { AuthProvider } from "./context/AuthContext";
+import AdminPanel from "./pages/adminPanel";
 
 
 
@@ -29,6 +30,7 @@ function App() {
           <Route element={<ProtectedRoute />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/wiadomości" element={<MessagesPage />} />
+            <Route path="/adminPanel" element={<AdminPanel />} />
           </Route>
         </Route>
       </Routes>

@@ -8,7 +8,7 @@ import { buttonVariants } from "@/components/ui/button"
 
 const TopBar = () => {
   const navigate = useNavigate();
-  const { user, logout, isadmin, isAuthenticated } = useAuth();
+  const { user, logout, isAuthenticated } = useAuth();
 
   const handleLoginClick = () => {
     navigate("/login");
