@@ -6,6 +6,7 @@ import axios from "axios";
 interface SongFormData {
   nazwa_utworu: string;
   data_wydania: string;
+  kryptonim_artystyczny: string;
 }
 
 interface BackendErrors {
@@ -23,7 +24,8 @@ const AdminPanel = () => {
   
   const [songData, setSongData] = useState<SongFormData>({
     nazwa_utworu: "",
-    data_wydania: ""
+    data_wydania: "",
+    kryptonim_artystyczny: ""
   });
 
   // Redirect if not admin
@@ -76,8 +78,9 @@ const AdminPanel = () => {
 
     // Create form data to send files
     const formData = new FormData();
-    // formData.append('nazwa_utworu', songData.nazwa_utworu);
-    // formData.append('data_wydania', songData.data_wydania);
+    formData.append('nazwa_utworu', songData.nazwa_utworu);
+    formData.append('data_wydania', songData.data_wydania);
+    formData.append('kryptonim_artystyczny', songData.kryptonim_artystyczny);
     formData.append('file', songFile);  // Backend oczekuje pole 'file' dla pliku audio
 
     try {
@@ -92,7 +95,8 @@ const AdminPanel = () => {
         alert("Piosenka została dodana pomyślnie!");
         setSongData({
           nazwa_utworu: "",
-          data_wydania: ""
+          data_wydania: "",
+          kryptonim_artystyczny: ""
         });
         setSongFile(null);
         setIsAddingMode(false);
@@ -182,6 +186,23 @@ const AdminPanel = () => {
               <div>
                 <input
                   type="text"
+                  name="kryptonim_artystyczny"
+                  placeholder="Artysta"
+                  value={songData.kryptonim_artystyczny}
+                  onChange={handleChange}
+                  className={`w-full p-2 rounded bg-gray-600 text-white focus:outline-none focus:ring-2 ${
+                    errors.kryptonim_artystyczny ? "focus:ring-red-500 border-red-500" : "focus:ring-blue-500"
+                  }`}
+                  required
+                />
+                {errors.kryptonim_artystyczny && (
+                  <p className="text-red-500 text-sm mt-1">{errors.kryptonim_artystyczny}</p>
+                )}
+              </div>
+              
+              <div>
+                <input
+                  type="text"
                   name="data_wydania"
                   placeholder="Rok wydania"
                   value={songData.data_wydania}
@@ -189,6 +210,7 @@ const AdminPanel = () => {
                   className={`w-full p-2 rounded bg-gray-600 text-white focus:outline-none focus:ring-2 ${
                     errors.data_wydania ? "focus:ring-red-500 border-red-500" : "focus:ring-blue-500"
                   }`}
+                  required
                 />
                 {errors.data_wydania && (
                   <p className="text-red-500 text-sm mt-1">{errors.data_wydania}</p>
