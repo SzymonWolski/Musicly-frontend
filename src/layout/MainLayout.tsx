@@ -1,6 +1,5 @@
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import LeftSidebar from "./components/LeftSidebar";
-import RightSideBar from "./components/RightSideBar";
 import TopBar from "@/components/ui/Topbar";
 import { Outlet, useLocation } from "react-router-dom";
 import Dashboard from ".././pages/Dashboard";

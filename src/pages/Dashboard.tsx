@@ -1,10 +1,7 @@
 import { useAuth } from "../context/AuthContext";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 const Dashboard = () => {
   const { user, logout, isadmin } = useAuth();
-  const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-gray-800 text-white p-4">
