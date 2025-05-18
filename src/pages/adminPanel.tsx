@@ -13,6 +13,17 @@ interface BackendErrors {
   [key: string]: string | undefined;
 }
 
+interface Song {
+  ID_utworu: number;
+  nazwa_utworu: string;
+  data_wydania: string;
+  Autor: {
+    imie: string;
+    nazwisko: string;
+    kryptonim_artystyczny: string;
+  };
+}
+
 const AdminPanel = () => {
   const { user, isadmin } = useAuth();
   const navigate = useNavigate();
@@ -21,6 +32,14 @@ const AdminPanel = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<BackendErrors>({});
   const [songFile, setSongFile] = useState<File | null>(null);
+  
+  // Search and delete states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Song[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [songToDelete, setSongToDelete] = useState<Song | null>(null);
+  const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   
   const [songData, setSongData] = useState<SongFormData>({
     nazwa_utworu: "",
@@ -63,6 +82,90 @@ const AdminPanel = () => {
         });
       }
     }
+  };
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
+  };
+
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    setIsSearching(true);
+    setDeleteError("");
+
+    try {
+      const response = await axios.get(`http://localhost:5000/files/list`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem("token")}`
+        }
+      });
+
+      if (response.data && response.data.utwory) {
+        // Filter songs locally based on search query
+        const filteredResults = response.data.utwory.filter((song: Song) => 
+          song.nazwa_utworu.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          song.Autor.kryptonim_artystyczny.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+        setSearchResults(filteredResults);
+      } else {
+        setSearchResults([]);
+      }
+    } catch (error) {
+      console.error("Error searching songs:", error);
+      setDeleteError("Błąd podczas wyszukiwania piosenek. Spróbuj ponownie później.");
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleDeleteClick = (song: Song) => {
+    setSongToDelete(song);
+    setIsConfirmationOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!songToDelete) return;
+    
+    setIsSubmitting(true);
+    setDeleteError("");
+
+    try {
+      const response = await axios.delete(
+        `http://localhost:5000/files/delete/${songToDelete.ID_utworu}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem("token")}`
+          }
+        }
+      );
+
+      if (response.data) {
+        // Remove deleted song from results
+        setSearchResults(prevResults => 
+          prevResults.filter(song => song.ID_utworu !== songToDelete.ID_utworu)
+        );
+        
+        // Close confirmation dialog
+        setIsConfirmationOpen(false);
+        setSongToDelete(null);
+        
+        alert("Piosenka została pomyślnie usunięta.");
+      }
+    } catch (error) {
+      console.error("Error deleting song:", error);
+      setDeleteError("Wystąpił błąd podczas usuwania piosenki. Spróbuj ponownie później.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setIsConfirmationOpen(false);
+    setSongToDelete(null);
   };
 
   const handleAddSong = async (e: React.FormEvent) => {
@@ -113,10 +216,6 @@ const AdminPanel = () => {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleDeletePlaceholder = () => {
-    alert("Funkcja usuwania będzie dostępna wkrótce!");
   };
 
   return (
@@ -272,15 +371,97 @@ const AdminPanel = () => {
         {isDeletingMode && (
           <div>
             <h2 className="text-2xl font-bold mb-4 text-center">Usuń piosenkę</h2>
-            <div className="text-center py-8 bg-gray-600 rounded-lg">
-              <p className="text-xl mb-4">Funkcja usuwania będzie dostępna wkrótce</p>
-              <button
-                onClick={() => setIsDeletingMode(false)}
-                className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition"
-              >
-                Powrót
-              </button>
+            
+            {deleteError && (
+              <div className="mb-4 p-2 bg-red-500 text-white rounded text-center">
+                {deleteError}
+              </div>
+            )}
+            
+            <div className="bg-gray-600 rounded-lg p-4">
+              <div className="flex mb-4">
+                <input
+                  type="text"
+                  placeholder="Wyszukaj piosenkę po tytule lub artyście"
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  className="flex-grow p-2 rounded-l bg-gray-700 text-white border-r-0 border-gray-600 focus:outline-none"
+                />
+                <button 
+                  onClick={handleSearch}
+                  disabled={isSearching}
+                  className={`px-4 py-2 bg-blue-600 text-white rounded-r hover:bg-blue-700 transition ${
+                    isSearching ? "opacity-70 cursor-not-allowed" : ""
+                  }`}
+                >
+                  {isSearching ? "Szukam..." : "Szukaj"}
+                </button>
+              </div>
+              
+              <div className="max-h-80 overflow-y-auto mt-4">
+                {searchResults.length === 0 ? (
+                  <p className="text-center text-gray-400 p-4">
+                    {searchQuery ? "Nie znaleziono pasujących piosenek" : "Wyszukaj piosenki, aby zobaczyć wyniki"}
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-gray-700">
+                    {searchResults.map((song) => (
+                      <li key={song.ID_utworu} className="py-3 flex justify-between items-center">
+                        <div>
+                          <p className="font-medium">{song.nazwa_utworu}</p>
+                          <p className="text-sm text-gray-400">{song.Autor.kryptonim_artystyczny} • {song.data_wydania}</p>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteClick(song)}
+                          className="ml-4 px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition text-sm"
+                        >
+                          Usuń
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              
+              <div className="mt-6 flex justify-center">
+                <button
+                  onClick={() => setIsDeletingMode(false)}
+                  className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition"
+                >
+                  Powrót
+                </button>
+              </div>
             </div>
+            
+            {/* Confirmation Modal */}
+            {isConfirmationOpen && songToDelete && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-gray-700 p-6 rounded-lg shadow-lg max-w-md w-full">
+                  <h3 className="text-xl font-bold mb-4">Potwierdź usunięcie</h3>
+                  <p className="mb-6">
+                    Czy na pewno chcesz usunąć piosenkę "{songToDelete.nazwa_utworu}" wykonawcy {songToDelete.Autor.kryptonim_artystyczny}? 
+                    Ta operacja jest nieodwracalna.
+                  </p>
+                  <div className="flex justify-end space-x-3">
+                    <button
+                      onClick={handleDeleteCancel}
+                      className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition"
+                    >
+                      Anuluj
+                    </button>
+                    <button
+                      onClick={handleDeleteConfirm}
+                      disabled={isSubmitting}
+                      className={`px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition ${
+                        isSubmitting ? "opacity-70 cursor-not-allowed" : ""
+                      }`}
+                    >
+                      {isSubmitting ? "Usuwanie..." : "Usuń piosenkę"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
