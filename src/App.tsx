@@ -6,7 +6,7 @@ import AlbumStrona from "./pages/album/AlbumStrona";
 import LoginForm from "./components/auth/LoginForm";
 import RegisterForm from "./components/auth/RegisterForm";
 import Dashboard from "./pages/Dashboard";
-import MessagesPage from "./pages/MessagesPage";
+import FriendsPage from "./pages/FriendsPage";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import { AuthProvider } from "./context/AuthContext";
 import AdminPanel from "./pages/adminPanel";
@@ -29,7 +29,7 @@ function App() {
           {/* Chronione ścieżki */}
           <Route element={<ProtectedRoute />}>
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/wiadomości" element={<MessagesPage />} />
+            <Route path="/friends" element={<FriendsPage />} />
             <Route path="/adminPanel" element={<AdminPanel />} />
           </Route>
         </Route>

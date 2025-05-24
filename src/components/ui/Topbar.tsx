@@ -34,7 +34,7 @@ const TopBar = () => {
           <HomeIcon className="mr-2 size-5 " />
           <span className="hidden md:inline">Home</span>
         </Link>
-        <Link to={"/wiadomości"}
+        <Link to={"/friends"}
             className={cn(buttonVariants(
                     { 
                     variant: "ghost", 
@@ -42,7 +42,7 @@ const TopBar = () => {
                     }
             ))}>
           <MessageCircleMore className="mr-2 size-5 " />
-            <span className="hidden md:inline">Wiadomości</span>
+            <span className="hidden md:inline">Przyjaciele</span>
         </Link>
         {isAuthenticated && (
         <Link to="/dashboard" 
