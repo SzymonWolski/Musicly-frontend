@@ -117,7 +117,6 @@ const FriendsPage = () => {
       }
     } catch (error: any) {
       console.error("Error searching users:", error);
-      // Use detailed error message from server if available
       const errorMessage = error.response?.data?.details || 
                            "Błąd podczas wyszukiwania użytkowników. Spróbuj ponownie później.";
       setSearchError(errorMessage);
@@ -137,15 +136,21 @@ const FriendsPage = () => {
           }
         }
       );
+
+      console.log("Odpowiedź serwera:", response.data);
       
       if (response.data.success) {
         alert("Zaproszenie zostało wysłane!");
         // Refresh the requests list
         fetchFriendsAndRequests();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error sending friend request:", error);
-      alert("Nie udało się wysłać zaproszenia. Spróbuj ponownie później.");
+      
+      // Handle specific error messages from the backend
+      const errorMessage = error.response?.data?.error || 
+                          "Nie udało się wysłać zaproszenia. Spróbuj ponownie później.";
+      alert(errorMessage);
     }
   };
 
