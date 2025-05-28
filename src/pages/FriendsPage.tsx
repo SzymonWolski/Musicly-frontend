@@ -230,6 +230,14 @@ const FriendsPage = () => {
     return "none";
   };
 
+  // Function to open chat with a friend - directly in the sidebar
+  const openChat = (friendName: string, friendId: number) => {
+    // Send event to MainLayout to display chat in the sidebar
+    window.dispatchEvent(new CustomEvent('pinChat', { 
+      detail: { friendId, friendName } 
+    }));
+  };
+
   return (
     <div className="min-h-screen bg-gray-800 text-white p-4">
       <div className="max-w-2xl mx-auto bg-gray-700 rounded-lg p-6 shadow-lg">
@@ -301,6 +309,10 @@ const FriendsPage = () => {
                   const friend = friendship.ID_uzytkownik1 === Number(user?.id)
                     ? friendship.Uzytkownik2 
                     : friendship.Uzytkownik1;
+                  
+                  const friendId = friendship.ID_uzytkownik1 === Number(user?.id) 
+                    ? friendship.ID_uzytkownik2 
+                    : friendship.ID_uzytkownik1;
                     
                   return (
                     <li key={friendship.ID_znajomych} className="py-3 flex justify-between items-center">
@@ -308,12 +320,20 @@ const FriendsPage = () => {
                         <p className="font-medium">{friend.nick}</p>
                         <p className="text-sm text-gray-400">{friend.email}</p>
                       </div>
-                      <button
-                        onClick={() => removeFriend(friendship.ID_znajomych)}
-                        className="ml-4 px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition text-sm"
-                      >
-                        Usuń
-                      </button>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => openChat(friend.nick, friendId)}
+                          className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition text-sm"
+                        >
+                          Chat
+                        </button>
+                        <button
+                          onClick={() => removeFriend(friendship.ID_znajomych)}
+                          className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition text-sm"
+                        >
+                          Usuń
+                        </button>
+                      </div>
                     </li>
                   );
                 })}

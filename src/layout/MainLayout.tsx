@@ -1,12 +1,45 @@
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import LeftSidebar from "./components/LeftSidebar";
+import RightSideBar from "./components/RightSideBar";
 import TopBar from "@/components/ui/Topbar";
 import { Outlet, useLocation } from "react-router-dom";
 import Dashboard from ".././pages/Dashboard";
+import { useEffect, useState } from "react";
+
+interface ChatInfo {
+  friendId: number;
+  friendName: string;
+}
 
 const MainLayout = () => {
   const location = useLocation();
   const isDashboard = location.pathname === "/dashboard";
+  const [isChatPinned, setIsChatPinned] = useState(false);
+  const [currentChat, setCurrentChat] = useState<ChatInfo | null>(null);
+
+  // Listen for pin/unpin events from FriendsPage
+  useEffect(() => {
+    const handlePinChat = (event: CustomEvent<ChatInfo>) => {
+      // Store the chat details and show the sidebar in one update
+      setCurrentChat(event.detail);
+      setIsChatPinned(true);
+    };
+
+    const handleUnpinChat = () => {
+      setIsChatPinned(false);
+      setCurrentChat(null);
+    };
+
+    // Add event listeners
+    window.addEventListener('pinChat', handlePinChat as EventListener);
+    window.addEventListener('unpinChat', handleUnpinChat);
+
+    // Cleanup on unmount
+    return () => {
+      window.removeEventListener('pinChat', handlePinChat as EventListener);
+      window.removeEventListener('unpinChat', handleUnpinChat);
+    };
+  }, []);
 
   return (
     <div className="h-screen bg-black text-white flex flex-col">
@@ -32,7 +65,7 @@ const MainLayout = () => {
             <ResizableHandle className="w-2 bg-black rounded-lg transition-colors" />
           )}
 
-          <ResizablePanel defaultSize={isDashboard ? 100 : 60}>
+          <ResizablePanel defaultSize={isDashboard ? 100 : isChatPinned ? 60 : 80}>
             <ResizablePanelGroup direction="vertical" className="flex-1">
               <ResizablePanel defaultSize={50} minSize={20}>
                 {/* Dynamiczne ładowanie zawartości w zależności od ścieżki */}
@@ -44,6 +77,16 @@ const MainLayout = () => {
             </ResizablePanelGroup>
           </ResizablePanel>
 
+          {/* Chat sidebar - only show when pinned */}
+          {isChatPinned && !isDashboard && currentChat && (
+            <>
+              <ResizableHandle className="w-2 bg-black rounded-lg transition-colors" />
+              <ResizablePanel defaultSize={20} minSize={15} maxSize={30}>
+                {/* Pass chat details directly as props */}
+                <RightSideBar initialChat={currentChat} />
+              </ResizablePanel>
+            </>
+          )}
         </ResizablePanelGroup>
       </div>
     </div>
