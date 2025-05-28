@@ -1,7 +1,8 @@
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { MessageCircle, X } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import axios from "axios"
+import { useAuth } from "@/context/AuthContext"
 
 interface PinnedChat {
   friendId: number;
@@ -11,8 +12,10 @@ interface PinnedChat {
 interface ChatMessage {
   id: number;
   sender: number;
+  recipient: number;
   content: string;
   timestamp: string;
+  read: boolean;
 }
 
 interface RightSideBarProps {
@@ -23,18 +26,26 @@ const RightSideBar = ({ initialChat }: RightSideBarProps) => {
   const [pinnedChat, setPinnedChat] = useState<PinnedChat>(initialChat);
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { user, token } = useAuth();
+  const userId = user ? Number(user.id) : -1;
 
   // Initialize with props and listen for future chat changes
   useEffect(() => {
     // Set the initial chat from props
     setPinnedChat(initialChat);
-    setMessages([]);
+    setIsLoading(true);
+    
+    // Load message history when chat is opened or changed
+    fetchMessageHistory(initialChat.friendId);
     
     // Still listen for events for future changes
     const handlePinChat = (event: CustomEvent<PinnedChat>) => {
       setPinnedChat(event.detail);
-      setMessages([]);
+      setIsLoading(true);
+      fetchMessageHistory(event.detail.friendId);
     };
 
     window.addEventListener('pinChat', handlePinChat as EventListener);
@@ -44,23 +55,113 @@ const RightSideBar = ({ initialChat }: RightSideBarProps) => {
     };
   }, [initialChat]);
 
+  // Scroll to bottom when new messages are added
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  // Poll for new messages every 5 seconds
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      if (pinnedChat) {
+        checkForNewMessages(pinnedChat.friendId);
+      }
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [pinnedChat, messages]);
+
+  const fetchMessageHistory = async (friendId: number) => {
+    setError("");
+    
+    try {
+      const response = await axios.get(`http://localhost:5000/messages/${friendId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.data && response.data.messages) {
+        setMessages(response.data.messages);
+      } else {
+        setMessages([]);
+      }
+    } catch (error) {
+      console.error("Error fetching message history:", error);
+      setError("Nie udało się pobrać historii wiadomości.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const checkForNewMessages = async (friendId: number) => {
+    try {
+      // This would typically check for messages newer than the latest we have
+      const latestMessageId = messages.length > 0 ? 
+        Math.max(...messages.map(msg => msg.id)) : 0;
+        
+      const response = await axios.get(
+        `http://localhost:5000/messages/${friendId}/new?after=${latestMessageId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      
+      if (response.data && response.data.messages && response.data.messages.length > 0) {
+        // Append new messages to our list
+        setMessages(prevMessages => [...prevMessages, ...response.data.messages]);
+      }
+    } catch (error) {
+      console.error("Error checking for new messages:", error);
+      // Don't show error UI for background polling failures
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!message.trim() || !pinnedChat) return;
 
     try {
-      // For now, just add the message locally
-      const newMessage: ChatMessage = {
-        id: Date.now(),
-        sender: -1, // Current user
-        content: message,
-        timestamp: new Date().toISOString()
-      };
+      // Send the message to the backend
+      const response = await axios.post(
+        "http://localhost:5000/messages/send",
+        {
+          recipientId: pinnedChat.friendId,
+          content: message
+        }, 
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
 
-      setMessages([...messages, newMessage]);
+      if (response.data && response.data.message) {
+        // Add the sent message to our local state
+        setMessages([...messages, response.data.message]);
+      } else {
+        // If backend doesn't return the message object, create a temporary one
+        const tempMessage: ChatMessage = {
+          id: Date.now(),
+          sender: userId,
+          recipient: pinnedChat.friendId,
+          content: message,
+          timestamp: new Date().toISOString(),
+          read: false
+        };
+        setMessages([...messages, tempMessage]);
+      }
+      
       setMessage("");
     } catch (error) {
       console.error("Error sending message:", error);
+      alert("Nie udało się wysłać wiadomości. Spróbuj ponownie.");
     }
+  };
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   const handleCloseChat = () => {
@@ -75,6 +176,11 @@ const RightSideBar = ({ initialChat }: RightSideBarProps) => {
     if (e.key === 'Enter') {
       handleSendMessage();
     }
+  };
+
+  const formatMessageTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
   };
 
   return (
@@ -97,28 +203,46 @@ const RightSideBar = ({ initialChat }: RightSideBarProps) => {
         </div>
 
         {/* Chat Messages */}
-        <ScrollArea className="flex-1 p-4">
-          {messages.length === 0 ? (
+        <ScrollArea className="flex-1 px-4">
+          {isLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+            </div>
+          ) : error ? (
+            <div className="text-center py-8 text-red-400">
+              <p>{error}</p>
+              <button 
+                onClick={() => fetchMessageHistory(pinnedChat.friendId)}
+                className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+              >
+                Spróbuj ponownie
+              </button>
+            </div>
+          ) : messages.length === 0 ? (
             <div className="text-center py-8 text-gray-400">
               <p>Rozpocznij czat z {pinnedChat.friendName}</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3 py-4">
               {messages.map((msg) => (
                 <div 
                   key={msg.id}
                   className={`max-w-[80%] p-3 rounded-lg ${
-                    msg.sender === -1 
+                    msg.sender === userId 
                       ? "bg-blue-600 text-white ml-auto" 
                       : "bg-zinc-700 text-white"
                   }`}
                 >
                   <p>{msg.content}</p>
                   <p className="text-xs text-gray-300 mt-1">
-                    {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    {formatMessageTime(msg.timestamp)}
+                    {msg.sender === userId && (
+                      <span className="ml-2">{msg.read ? "✓✓" : "✓"}</span>
+                    )}
                   </p>
                 </div>
               ))}
+              <div ref={messagesEndRef} />
             </div>
           )}
         </ScrollArea>
@@ -132,11 +256,13 @@ const RightSideBar = ({ initialChat }: RightSideBarProps) => {
               value={message}
               onChange={handleMessageChange}
               onKeyPress={handleKeyPress}
-              className="flex-1 p-2 rounded-l bg-zinc-700 text-white border-r-0 border-zinc-600 focus:outline-none"
+              disabled={isLoading}
+              className="flex-1 p-2 rounded-l bg-zinc-700 text-white border-r-0 border-zinc-600 focus:outline-none disabled:opacity-50"
             />
             <button 
               onClick={handleSendMessage}
-              className="px-4 py-2 bg-blue-600 text-white rounded-r hover:bg-blue-700 transition"
+              disabled={isLoading || !message.trim()}
+              className="px-4 py-2 bg-blue-600 text-white rounded-r hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Wyślij
             </button>
