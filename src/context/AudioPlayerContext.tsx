@@ -1,0 +1,529 @@
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import axios from 'axios';
+import { useAuth } from './AuthContext';
+
+interface Song {
+  ID_utworu: number;
+  nazwa_utworu: string;
+  data_wydania: string;
+  Autor: {
+    imie: string;
+    nazwisko: string;
+    kryptonim_artystyczny: string;
+  };
+}
+
+interface AudioPlayerContextType {
+  currentSong: Song | null;
+  isPlaying: boolean;
+  currentTime: number;
+  duration: number;
+  volume: number;
+  isLooping: boolean;
+  playlist: Song[];
+  favoriteSongs: number[];
+  playSong: (song: Song) => Promise<void>;
+  togglePlayPause: () => void;
+  seekTo: (time: number) => void;
+  setVolume: (volume: number) => void;
+  toggleLoop: () => void;
+  toggleFavorite: (songId: number) => Promise<void>;
+}
+
+const AudioPlayerContext = createContext<AudioPlayerContextType | undefined>(undefined);
+
+export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
+  const { token } = useAuth();
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [currentSong, setCurrentSong] = useState<Song | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolumeState] = useState(1);
+  const [isLooping, setIsLooping] = useState(false);
+  const [playlist, setPlaylist] = useState<Song[]>([]);
+  const [favoriteSongs, setFavoriteSongs] = useState<number[]>([]);
+  const animationRef = useRef<number | null>(null);
+
+  // Add a new ref to track if we're currently loading a song
+  const isLoadingSongRef = useRef(false);
+
+  // Initialize audio element
+  useEffect(() => {
+    // Create audio element if it doesn't exist
+    if (!audioRef.current) {
+      audioRef.current = new Audio();
+      
+      // Set up event listeners
+      audioRef.current.addEventListener('timeupdate', handleTimeUpdate);
+      audioRef.current.addEventListener('loadedmetadata', handleLoadedMetadata);
+      audioRef.current.addEventListener('durationchange', handleDurationChange); // Add durationchange listener
+      audioRef.current.addEventListener('ended', handleEnded);
+      audioRef.current.addEventListener('play', () => setIsPlaying(true));
+      audioRef.current.addEventListener('pause', () => setIsPlaying(false));
+      audioRef.current.addEventListener('error', handleAudioError); // Add error listener
+    }
+    
+    // Load saved state from localStorage
+    const savedState = localStorage.getItem('audioPlayerState');
+    if (savedState) {
+      try {
+        const { songId, currentTime, volume, isLooping } = JSON.parse(savedState);
+        
+        // Restore settings
+        setVolumeState(volume || 1);
+        setIsLooping(isLooping || false);
+        if (audioRef.current) {
+          audioRef.current.volume = volume || 1;
+          audioRef.current.loop = isLooping || false;
+        }
+        
+        // If we had a song playing, try to restore it
+        if (songId) {
+          axios.get(`http://localhost:5000/files/song/${songId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+          .then(response => {
+            const song = response.data;
+            setCurrentSong(song);
+            if (audioRef.current) {
+              audioRef.current.src = `http://localhost:5000/files/play/${songId}`;
+              audioRef.current.currentTime = currentTime || 0;
+              // Don't autoplay on page load, just prepare the song
+            }
+          })
+          .catch(err => console.error("Failed to restore song:", err));
+        }
+      } catch (error) {
+        console.error("Error restoring player state:", error);
+      }
+    }
+    
+    // Fetch favorites and playlist
+    fetchFavorites();
+    fetchRecentSongs();
+    
+    // Clean up on unmount
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+      if (audioRef.current) {
+        audioRef.current.removeEventListener('timeupdate', handleTimeUpdate);
+        audioRef.current.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        audioRef.current.removeEventListener('durationchange', handleDurationChange);
+        audioRef.current.removeEventListener('ended', handleEnded);
+        audioRef.current.removeEventListener('error', handleAudioError);
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, [token]);
+
+  // Animation function for smooth progress updates
+  const animateProgress = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+      if (isPlaying) {
+        animationRef.current = requestAnimationFrame(animateProgress);
+      }
+    }
+  };
+
+  // Start/stop animation when playing state changes
+  useEffect(() => {
+    if (isPlaying) {
+      animationRef.current = requestAnimationFrame(animateProgress);
+    } else if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
+  }, [isPlaying]);
+
+  // Save current state to localStorage whenever it changes
+  useEffect(() => {
+    if (currentSong) {
+      const stateToSave = {
+        songId: currentSong.ID_utworu,
+        currentTime: audioRef.current?.currentTime || 0,
+        volume,
+        isLooping
+      };
+      localStorage.setItem('audioPlayerState', JSON.stringify(stateToSave));
+      
+      // Also notify other components about the player state update
+      const playerState = {
+        currentSong,
+        isPlaying,
+        currentTime,
+        duration
+      };
+      
+      window.dispatchEvent(new CustomEvent('playerStateUpdate', {
+        detail: playerState
+      }));
+      
+      // Also emit current playlist
+      window.dispatchEvent(new CustomEvent('playlistUpdate', {
+        detail: { songs: playlist }
+      }));
+    }
+  }, [currentSong, isPlaying, currentTime, duration, volume, isLooping]);
+
+  // Handlers
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      // We don't set currentTime here, it's handled by the animation frame
+      // But we do save to localStorage every 5 seconds to avoid too many writes
+      if (Math.floor(audioRef.current.currentTime) % 5 === 0) {
+        const stateToSave = {
+          songId: currentSong?.ID_utworu,
+          currentTime: audioRef.current.currentTime,
+          volume,
+          isLooping
+        };
+        localStorage.setItem('audioPlayerState', JSON.stringify(stateToSave));
+      }
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current) {
+      console.log("Metadata loaded, duration:", audioRef.current.duration);
+      if (!isNaN(audioRef.current.duration) && audioRef.current.duration > 0) {
+        setDuration(audioRef.current.duration);
+      } else {
+        console.warn("Invalid duration in loadedmetadata:", audioRef.current.duration);
+        // Try to get duration another way - sometimes it's available in the durationchange event
+      }
+    }
+  };
+
+  // Add a new handler for durationchange event
+  const handleDurationChange = () => {
+    if (audioRef.current) {
+      console.log("Duration changed:", audioRef.current.duration);
+      if (!isNaN(audioRef.current.duration) && audioRef.current.duration > 0) {
+        setDuration(audioRef.current.duration);
+      }
+    }
+  };
+
+  // Add error handler
+  const handleAudioError = (e: ErrorEvent) => {
+    console.error("Audio error:", e);
+    // Try to recover if possible
+    if (audioRef.current) {
+      console.log("Current audio source:", audioRef.current.src);
+    }
+  };
+
+  // Add the missing handleEnded function
+  const handleEnded = () => {
+    if (!isLooping) {
+      setIsPlaying(false);
+      
+      // Optionally - add logic to play next song in playlist
+      // if (currentSong && playlist.length > 1) {
+      //   const currentIndex = playlist.findIndex(song => song.ID_utworu === currentSong.ID_utworu);
+      //   if (currentIndex !== -1 && currentIndex < playlist.length - 1) {
+      //     const nextSong = playlist[currentIndex + 1];
+      //     playSong(nextSong);
+      //   }
+      // }
+    }
+    // If looping is enabled, the audio element will loop automatically due to the loop property
+  };
+
+  // API functions
+  const fetchFavorites = async () => {
+    try {
+      const response = await axios.get("http://localhost:5000/favorites", {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.data && response.data.favorites) {
+        const favoriteIds = response.data.favorites.map((fav: any) => fav.songId);
+        setFavoriteSongs(favoriteIds);
+      }
+    } catch (err) {
+      console.error("Error fetching favorites:", err);
+    }
+  };
+
+  const fetchRecentSongs = async () => {
+    try {
+      const response = await axios.get("http://localhost:5000/files/list", {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.data && response.data.utwory) {
+        const songs = response.data.utwory
+          .sort((a: Song, b: Song) => b.ID_utworu - a.ID_utworu)
+          .slice(0, 100);
+        
+        setPlaylist(songs);
+      }
+    } catch (err) {
+      console.error("Error fetching songs:", err);
+    }
+  };
+
+  // Enhanced playSong with better duration handling
+  const playSong = async (song: Song) => {
+    // Prevent multiple rapid calls for the same song
+    if (isLoadingSongRef.current) {
+      console.log("Already loading a song, please wait...");
+      return;
+    }
+    
+    // If it's the same song that's already playing, just resume playback
+    if (currentSong && song.ID_utworu === currentSong.ID_utworu && audioRef.current) {
+      if (!isPlaying) {
+        audioRef.current.play()
+          .then(() => setIsPlaying(true))
+          .catch(e => console.error("Error resuming playback:", e));
+      }
+      return;
+    }
+    
+    isLoadingSongRef.current = true;
+    
+    try {
+      // First check if audio file is available
+      await axios.head(`http://localhost:5000/files/play/${song.ID_utworu}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      setCurrentSong(song);
+
+      // Completely stop any existing audio
+      if (audioRef.current) {
+        // Reset duration first to avoid showing previous song's duration
+        setDuration(0);
+        
+        // Explicitly stop and unload previous audio
+        audioRef.current.pause();
+        audioRef.current.src = '';
+        audioRef.current.load();
+        
+        // Store settings we want to keep
+        const previousVolume = audioRef.current.volume;
+        const previousLoop = audioRef.current.loop;
+        
+        // Remove old listeners
+        audioRef.current.removeEventListener('timeupdate', handleTimeUpdate);
+        audioRef.current.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        audioRef.current.removeEventListener('durationchange', handleDurationChange);
+        audioRef.current.removeEventListener('ended', handleEnded);
+        audioRef.current.removeEventListener('error', handleAudioError);
+        
+        // Create new audio element
+        audioRef.current = new Audio();
+        
+        // Restore settings
+        audioRef.current.volume = previousVolume;
+        audioRef.current.loop = previousLoop;
+        
+        // Add listeners to new element
+        audioRef.current.addEventListener('timeupdate', handleTimeUpdate);
+        audioRef.current.addEventListener('loadedmetadata', handleLoadedMetadata);
+        audioRef.current.addEventListener('durationchange', handleDurationChange);
+        audioRef.current.addEventListener('ended', handleEnded);
+        audioRef.current.addEventListener('play', () => setIsPlaying(true));
+        audioRef.current.addEventListener('pause', () => setIsPlaying(false));
+        audioRef.current.addEventListener('error', handleAudioError);
+        
+        // Set source and attempt to load & play
+        audioRef.current.src = `http://localhost:5000/files/play/${song.ID_utworu}`;
+
+        // Use preload to ensure metadata is loaded
+        audioRef.current.preload = "metadata";
+        
+        // Fetch duration manually if needed
+        const fetchDuration = async () => {
+          try {
+            // Try to get metadata directly
+            const response = await axios.head(`http://localhost:5000/files/play/${song.ID_utworu}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Range': 'bytes=0-1' // Just request a tiny bit to get headers
+              }
+            });
+            
+            // Some servers provide Content-Duration header
+            const contentDuration = response.headers['content-duration'];
+            if (contentDuration && !isNaN(Number(contentDuration))) {
+              console.log("Got duration from headers:", contentDuration);
+              setDuration(Number(contentDuration));
+            }
+          } catch (err) {
+            console.error("Failed to fetch duration data:", err);
+          }
+        };
+        
+        // Start playing with a small delay to ensure the src is set
+        setTimeout(() => {
+          if (audioRef.current) {
+            audioRef.current.play()
+              .then(() => {
+                setIsPlaying(true);
+                // Double check if duration is set after successful play
+                if (audioRef.current && !isNaN(audioRef.current.duration) && audioRef.current.duration > 0) {
+                  setDuration(audioRef.current.duration);
+                } else {
+                  // Last resort - try to fetch duration separately
+                  fetchDuration();
+                }
+              })
+              .catch(e => {
+                console.error("Playback error:", e);
+                setIsPlaying(false);
+                fetchDuration(); // Try to get duration even if playback fails
+              })
+              .finally(() => {
+                isLoadingSongRef.current = false;
+              });
+          } else {
+            isLoadingSongRef.current = false;
+          }
+        }, 100);
+      }
+    } catch (err) {
+      console.error("Error checking audio file:", err);
+      alert("Nie można załadować pliku audio. Plik może nie istnieć lub nie masz do niego dostępu.");
+      isLoadingSongRef.current = false;
+    }
+  };
+
+  const togglePlayPause = () => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else if (currentSong) {
+        audioRef.current.play().catch(e => console.error("Playback error:", e));
+      }
+    }
+  };
+
+  const seekTo = (time: number) => {
+    setCurrentTime(time);
+    if (audioRef.current) {
+      audioRef.current.currentTime = time;
+    }
+  };
+
+  const setVolume = (newVolume: number) => {
+    setVolumeState(newVolume);
+    if (audioRef.current) {
+      audioRef.current.volume = newVolume;
+    }
+  };
+
+  const toggleLoop = () => {
+    const newLoopingState = !isLooping;
+    setIsLooping(newLoopingState);
+    if (audioRef.current) {
+      audioRef.current.loop = newLoopingState;
+    }
+  };
+
+  const toggleFavorite = async (songId: number) => {
+    const isFavorite = favoriteSongs.includes(songId);
+    
+    try {
+      if (isFavorite) {
+        // Remove from favorites
+        await axios.delete(`http://localhost:5000/favorites/${songId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        // Update local state
+        setFavoriteSongs(favoriteSongs.filter(id => id !== songId));
+      } else {
+        // Add to favorites
+        await axios.post("http://localhost:5000/favorites", {
+          songId
+        }, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        // Update local state
+        setFavoriteSongs([...favoriteSongs, songId]);
+      }
+    } catch (err) {
+      console.error("Error updating favorites:", err);
+      alert("Nie udało się zaktualizować ulubionych. Spróbuj ponownie.");
+    }
+  };
+
+  // For debugging during development
+  useEffect(() => {
+    const handlePlaySongRequest = (event: CustomEvent) => {
+      if (event.detail && event.detail.song) {
+        playSong(event.detail.song);
+      }
+    };
+    
+    const handleTogglePlayRequest = () => {
+      togglePlayPause();
+    };
+    
+    window.addEventListener('playSongFromSidebar', handlePlaySongRequest as EventListener);
+    window.addEventListener('togglePlayFromMini', handleTogglePlayRequest as EventListener);
+    
+    return () => {
+      window.removeEventListener('playSongFromSidebar', handlePlaySongRequest as EventListener);
+      window.removeEventListener('togglePlayFromMini', handleTogglePlayRequest as EventListener);
+    };
+  }, []);
+
+  // Hidden audio element for the whole application
+  const audioElement = (
+    <audio 
+      ref={audioRef}
+      style={{ display: 'none' }}
+    />
+  );
+
+  return (
+    <AudioPlayerContext.Provider
+      value={{
+        currentSong,
+        isPlaying,
+        currentTime,
+        duration,
+        volume,
+        isLooping,
+        playlist,
+        favoriteSongs,
+        playSong,
+        togglePlayPause,
+        seekTo,
+        setVolume,
+        toggleLoop,
+        toggleFavorite
+      }}
+    >
+      {audioElement}
+      {children}
+    </AudioPlayerContext.Provider>
+  );
+};
+
+export const useAudioPlayer = () => {
+  const context = useContext(AudioPlayerContext);
+  if (context === undefined) {
+    throw new Error('useAudioPlayer must be used within an AudioPlayerProvider');
+  }
+  return context;
+};

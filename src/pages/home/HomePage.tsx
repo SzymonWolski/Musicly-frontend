@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
+import { useAudioPlayer } from "@/context/AudioPlayerContext";
+import { useAuth } from "@/context/AuthContext";
 import axios from "axios";
 
 interface Song {
@@ -13,204 +15,56 @@ interface Song {
 }
 
 const HomePage = () => {
-  const [songs, setSongs] = useState<Song[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [currentSong, setCurrentSong] = useState<Song | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const { token } = useAuth();
+  const {
+    currentSong,
+    isPlaying,
+    currentTime,
+    duration,
+    volume,
+    isLooping,
+    playlist,
+    favoriteSongs,
+    playSong,
+    togglePlayPause,
+    seekTo,
+    setVolume,
+    toggleLoop,
+    toggleFavorite
+  } = useAudioPlayer();
   
   // Add search states
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [isSearchResults, setIsSearchResults] = useState(false);
-  const [originalSongs, setOriginalSongs] = useState<Song[]>([]);
-
-  useEffect(() => {
-    fetchSongs();
-  }, []);
-
-  const fetchSongs = async () => {
-    setLoading(true);
-    setError("");
-    
-    try {
-      const response = await axios.get("http://localhost:5000/files/list", {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem("token")}`
-        }
-      });
-      
-      if (response.data && response.data.utwory) {
-        // Sort songs by ID in descending order and limit to 100
-        const sortedSongs = response.data.utwory
-          .sort((a: Song, b: Song) => b.ID_utworu - a.ID_utworu)
-          .slice(0, 100);
-        
-        setSongs(sortedSongs);
-        setOriginalSongs(sortedSongs); // Store original list for reset
-        
-        // Set the first song as current if available
-        if (sortedSongs.length > 0 && !currentSong) {
-          setCurrentSong(sortedSongs[0]);
-        }
-      }
-    } catch (err) {
-      console.error("Error fetching songs:", err);
-      setError("Nie udało się załadować piosenek. Spróbuj ponownie później.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Add function to fetch audio file
+  const [songs, setSongs] = useState<Song[]>(playlist);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [isVolumeVisible, setIsVolumeVisible] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
   const [audioError, setAudioError] = useState("");
 
-  // Add custom audio player states
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(1);
-  const [isLooping, setIsLooping] = useState(false);
-  const [isVolumeVisible, setIsVolumeVisible] = useState(false);
-  
-  // Add animation frame reference
-  const animationRef = useRef<number | null>(null);
-
-  const handleTimeUpdate = () => {
-    // Let the animation handle the visual updates
-    if (audioRef.current) {
-      // This will now only update the actual audio time reference
-      // but not directly set the visual state
-    }
-  };
-
-  const handleLoadedMetadata = () => {
-    if (audioRef.current) {
-      setDuration(audioRef.current.duration);
-    }
-  };
-
-  // Animation function for smooth progress updates
-  const animateProgress = () => {
-    if (audioRef.current) {
-      // Update the visual state with the current audio time
-      setCurrentTime(audioRef.current.currentTime);
-      // Continue animation if playing
-      if (isPlaying) {
-        animationRef.current = requestAnimationFrame(animateProgress);
-      }
-    }
-  };
-
-  // Update animation handling when play state changes
+  // Initialize local song list with context playlist
   useEffect(() => {
-    if (isPlaying) {
-      // Start animation
-      animationRef.current = requestAnimationFrame(animateProgress);
-    } else if (animationRef.current) {
-      // Stop animation
-      cancelAnimationFrame(animationRef.current);
-      animationRef.current = null;
+    if (playlist.length > 0) {
+      setSongs(playlist);
+      setLoading(false);
+    } else {
+      // The playlist will be loaded by the AudioPlayerContext
+      setLoading(false);
     }
-    
-    // Cleanup on unmount
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, [isPlaying]);
+  }, [playlist]);
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newTime = Number(e.target.value);
-    setCurrentTime(newTime);
-    if (audioRef.current) {
-      audioRef.current.currentTime = newTime;
-    }
-  };
-
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newVolume = Number(e.target.value);
-    setVolume(newVolume);
-    if (audioRef.current) {
-      audioRef.current.volume = newVolume;
-    }
-  };
-
-  const toggleLooping = () => {
-    setIsLooping(!isLooping);
-    if (audioRef.current) {
-      audioRef.current.loop = !isLooping;
-    }
-  };
-
-  const toggleVolumeSlider = () => {
-    setIsVolumeVisible(!isVolumeVisible);
-  };
-  
   // Format time helper function
   const formatTime = (time: number) => {
-    if (isNaN(time)) return "00:00";
+    if (isNaN(time) || time < 0) return "00:00";
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
-
-  const fetchAudioFile = async (songId: number) => {
-    setAudioLoading(true);
-    setAudioError("");
-
-    try {
-      // Check if file is available before attempting to play
-      await axios.head(`http://localhost:5000/files/play/${songId}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem("token")}`
-        }
-      });
-      
-      // If head request succeeds, the file exists and can be streamed
-      return true;
-    } catch (err) {
-      console.error("Error checking audio file:", err);
-      setAudioError("Nie można załadować pliku audio. Plik może nie istnieć lub nie masz do niego dostępu.");
-      return false;
-    } finally {
-      setAudioLoading(false);
-    }
-  };
-
-  const handlePlaySong = async (song: Song) => {
-    setCurrentSong(song);
-    
-    // Check if audio file is available
-    const isFileAvailable = await fetchAudioFile(song.ID_utworu);
-    
-    if (isFileAvailable) {
-      setIsPlaying(true);
-      
-      if (audioRef.current) {
-        // Set the source and play after a short delay to ensure the source is updated
-        setTimeout(() => {
-          if (audioRef.current) {
-            audioRef.current.play().catch(e => console.error("Playback error:", e));
-          }
-        }, 100);
-      }
-    } else {
-      setIsPlaying(false);
-    }
-  };
-
-  const togglePlayPause = () => {
-    if (audioRef.current) {
-      if (isPlaying) {
-        audioRef.current.pause();
-      } else {
-        audioRef.current.play().catch(e => console.error("Playback error:", e));
-      }
-      setIsPlaying(!isPlaying);
-    }
+  
+  const toggleVolumeSlider = () => {
+    setIsVolumeVisible(!isVolumeVisible);
   };
   
   // Add search handlers
@@ -219,14 +73,14 @@ const HomePage = () => {
     
     // Reset to original list if search query is cleared
     if (e.target.value === "" && isSearchResults) {
-      setSongs(originalSongs);
+      setSongs(playlist);
       setIsSearchResults(false);
     }
   };
 
   const handleSearch = () => {
     if (!searchQuery.trim()) {
-      setSongs(originalSongs);
+      setSongs(playlist);
       setIsSearchResults(false);
       return;
     }
@@ -234,7 +88,7 @@ const HomePage = () => {
     setIsSearching(true);
     
     // Filter songs locally based on search query
-    const filteredResults = originalSongs.filter(song => 
+    const filteredResults = playlist.filter(song => 
       song.nazwa_utworu.toLowerCase().includes(searchQuery.toLowerCase()) ||
       song.Autor.kryptonim_artystyczny.toLowerCase().includes(searchQuery.toLowerCase())
     );
@@ -247,6 +101,19 @@ const HomePage = () => {
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       handleSearch();
+    }
+  };
+  
+  const handlePlayThisSong = async (song: Song) => {
+    setAudioLoading(true);
+    setAudioError("");
+    
+    try {
+      await playSong(song);
+    } catch (error) {
+      setAudioError("Nie można załadować pliku audio. Spróbuj ponownie później.");
+    } finally {
+      setAudioLoading(false);
     }
   };
 
@@ -278,20 +145,6 @@ const HomePage = () => {
                 {audioError}
               </div>
             ) : null}
-            
-            {/* Hidden audio element for controlling playback */}
-            <audio 
-              ref={audioRef}
-              src={`http://localhost:5000/files/play/${currentSong.ID_utworu}`} 
-              onEnded={() => setIsPlaying(false)}
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-              onError={() => setAudioError("Błąd odtwarzania pliku audio.")}
-              onTimeUpdate={handleTimeUpdate}
-              onLoadedMetadata={handleLoadedMetadata}
-              loop={isLooping}
-              className="hidden"
-            />
 
             {/* Custom Audio Player */}
             <div className="bg-gray-900 bg-opacity-60 rounded-lg p-4 backdrop-blur-sm">
@@ -301,22 +154,24 @@ const HomePage = () => {
                 <input 
                   type="range"
                   min={0}
-                  max={duration || 100}
+                  max={duration || 100} // Fallback to 100 if duration is 0
                   value={currentTime}
-                  onChange={handleSeek}
+                  onChange={(e) => seekTo(Number(e.target.value))}
                   className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
                   style={{
-                    background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${(currentTime / duration) * 100}%, #4b5563 ${(currentTime / duration) * 100}%, #4b5563 100%)`,
+                    background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${(duration > 0 ? (currentTime / duration) * 100 : 0)}%, #4b5563 ${(duration > 0 ? (currentTime / duration) * 100 : 0)}%, #4b5563 100%)`,
                   }}
                 />
-                <span className="text-xs text-gray-400">{formatTime(duration)}</span>
+                <span className="text-xs text-gray-400">
+                  {duration > 0 ? formatTime(duration) : "--:--"}
+                </span>
               </div>
 
               {/* Controls */}
               <div className="flex justify-center items-center gap-6 my-2">
                 {/* Loop Button */}
                 <button 
-                  onClick={toggleLooping}
+                  onClick={toggleLoop}
                   className={`p-2 rounded-full ${isLooping ? 'bg-blue-600 bg-opacity-70' : 'text-gray-300 hover:text-white'}`}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -327,8 +182,8 @@ const HomePage = () => {
                 {/* Play/Pause Button */}
                 <button
                   onClick={togglePlayPause}
-                  disabled={!!audioError}
-                  className={`p-3 ${audioError ? 'bg-gray-600 bg-opacity-70' : 'bg-blue-600 bg-opacity-80 hover:bg-blue-700 hover:bg-opacity-90'} text-white rounded-full transition`}
+                  disabled={!!audioError || !currentSong}
+                  className={`p-3 ${audioError || !currentSong ? 'bg-gray-600 bg-opacity-70' : 'bg-blue-600 bg-opacity-80 hover:bg-blue-700 hover:bg-opacity-90'} text-white rounded-full transition`}
                 >
                   {isPlaying ? (
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -374,7 +229,7 @@ const HomePage = () => {
                         max={1}
                         step={0.01}
                         value={volume}
-                        onChange={handleVolumeChange}
+                        onChange={(e) => setVolume(Number(e.target.value))}
                         className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
                         style={{
                           background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${volume * 100}%, #4b5563 ${volume * 100}%, #4b5563 100%)`,
@@ -441,18 +296,47 @@ const HomePage = () => {
                   className={`px-4 py-3 hover:bg-gray-700 hover:bg-opacity-50 cursor-pointer transition ${
                     currentSong?.ID_utworu === song.ID_utworu ? 'bg-gray-700 bg-opacity-50' : ''
                   }`}
-                  onClick={() => handlePlaySong(song)}
+                  onClick={() => handlePlayThisSong(song)}
                 >
                   <div className="flex justify-between items-center">
                     <div>
                       <p className="font-medium text-white">{song.nazwa_utworu}</p>
                       <p className="text-sm text-gray-400">{song.Autor.kryptonim_artystyczny} • {song.data_wydania}</p>
                     </div>
-                    <button className="p-1 text-blue-400 hover:text-blue-300 transition">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                      </svg>
-                    </button>
+                    <div className="flex items-center space-x-3">
+                      {/* Heart/Favorite button */}
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleFavorite(song.ID_utworu);
+                        }}
+                        className={`p-1 transition ${
+                          favoriteSongs.includes(song.ID_utworu) 
+                            ? 'text-red-500 hover:text-red-400' 
+                            : 'text-gray-400 hover:text-red-400'
+                        }`}
+                        title={favoriteSongs.includes(song.ID_utworu) ? "Usuń z ulubionych" : "Dodaj do ulubionych"}
+                      >
+                        {favoriteSongs.includes(song.ID_utworu) ? (
+                          // Filled heart
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
+                          </svg>
+                        ) : (
+                          // Empty heart
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                          </svg>
+                        )}
+                      </button>
+                      
+                      {/* Play button */}
+                      <button className="p-1 text-blue-400 hover:text-blue-300 transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 </li>
               ))}
