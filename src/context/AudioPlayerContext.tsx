@@ -1,6 +1,9 @@
-import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import axios from 'axios';
 import { useAuth } from './AuthContext';
+
+// Define playback source types
+export type PlaybackSource = 'playlist' | 'favorites' | 'single';
 
 interface Song {
   ID_utworu: number;
@@ -20,9 +23,15 @@ interface AudioPlayerContextType {
   duration: number;
   volume: number;
   isLooping: boolean;
-  playlist: Song[];
+  playlist: Song[]; // This is now specifically the playback queue
+  allSongs: Song[]; // New property for all available songs
   favoriteSongs: number[];
-  playSong: (song: Song) => Promise<void>;
+  favoriteDetails: Song[];
+  currentPlaybackSource: PlaybackSource;
+  playSong: (song: Song, source?: PlaybackSource) => Promise<void>;
+  addToPlaylist: (song: Song) => void;
+  removeFromPlaylist: (songId: number) => void; // New function to remove songs from playlist
+  clearPlaylist: () => void; // New function to clear the queue
   togglePlayPause: () => void;
   seekTo: (time: number) => void;
   setVolume: (volume: number) => void;
@@ -41,8 +50,11 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(1);
   const [isLooping, setIsLooping] = useState(false);
-  const [playlist, setPlaylist] = useState<Song[]>([]);
+  const [playlist, setPlaylist] = useState<Song[]>([]); // Initialize empty playlist/queue
+  const [allSongs, setAllSongs] = useState<Song[]>([]); // Store all available songs
   const [favoriteSongs, setFavoriteSongs] = useState<number[]>([]);
+  const [favoriteDetails, setFavoriteDetails] = useState<Song[]>([]);
+  const [currentPlaybackSource, setCurrentPlaybackSource] = useState<PlaybackSource>('single');
   const animationRef = useRef<number | null>(null);
 
   // Add a new ref to track if we're currently loading a song
@@ -220,18 +232,35 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
   // Add the missing handleEnded function
   const handleEnded = () => {
     if (!isLooping) {
-      setIsPlaying(false);
-      
-      // Optionally - add logic to play next song in playlist
-      // if (currentSong && playlist.length > 1) {
-      //   const currentIndex = playlist.findIndex(song => song.ID_utworu === currentSong.ID_utworu);
-      //   if (currentIndex !== -1 && currentIndex < playlist.length - 1) {
-      //     const nextSong = playlist[currentIndex + 1];
-      //     playSong(nextSong);
-      //   }
-      // }
+      // Play next song based on current source if not looping
+      if (currentPlaybackSource !== 'single' && currentSong) {
+        playNextSong();
+      } else {
+        setIsPlaying(false);
+      }
     }
     // If looping is enabled, the audio element will loop automatically due to the loop property
+  };
+
+  // New function to play the next song based on current source
+  const playNextSong = () => {
+    if (!currentSong) return;
+    
+    const sourceList = 
+      currentPlaybackSource === 'favorites' ? favoriteDetails : 
+      currentPlaybackSource === 'playlist' ? playlist : 
+      [];
+    
+    if (sourceList.length > 0) {
+      const currentIndex = sourceList.findIndex(song => song.ID_utworu === currentSong.ID_utworu);
+      if (currentIndex !== -1 && currentIndex < sourceList.length - 1) {
+        const nextSong = sourceList[currentIndex + 1];
+        playSong(nextSong, currentPlaybackSource);
+      } else {
+        // We're at the end of the list
+        setIsPlaying(false);
+      }
+    }
   };
 
   // API functions
@@ -246,12 +275,26 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
       if (response.data && response.data.favorites) {
         const favoriteIds = response.data.favorites.map((fav: any) => fav.songId);
         setFavoriteSongs(favoriteIds);
+        
+        // Also store the full song details for favorites
+        const formattedFavorites = response.data.favorites.map((fav: any) => ({
+          ID_utworu: fav.songId,
+          nazwa_utworu: fav.songName,
+          data_wydania: fav.likedAt.split('T')[0],
+          Autor: {
+            imie: "",
+            nazwisko: "",
+            kryptonim_artystyczny: fav.artistName
+          }
+        }));
+        setFavoriteDetails(formattedFavorites);
       }
     } catch (err) {
       console.error("Error fetching favorites:", err);
     }
   };
 
+  // Modified to populate allSongs instead of playlist
   const fetchRecentSongs = async () => {
     try {
       const response = await axios.get("http://localhost:5000/files/list", {
@@ -265,20 +308,42 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
           .sort((a: Song, b: Song) => b.ID_utworu - a.ID_utworu)
           .slice(0, 100);
         
-        setPlaylist(songs);
+        setAllSongs(songs); // Set all songs, but don't populate playlist
       }
     } catch (err) {
       console.error("Error fetching songs:", err);
     }
   };
 
-  // Enhanced playSong with better duration handling
-  const playSong = async (song: Song) => {
+  // Add a function to add songs to playlist
+  const addToPlaylist = (song: Song) => {
+    // Check if song is already in playlist
+    const exists = playlist.some(item => item.ID_utworu === song.ID_utworu);
+    if (!exists) {
+      setPlaylist(prev => [...prev, song]);
+    }
+  };
+
+  // Add a function to remove songs from playlist
+  const removeFromPlaylist = (songId: number) => {
+    setPlaylist(prev => prev.filter(song => song.ID_utworu !== songId));
+  };
+
+  // Add a function to clear the playlist
+  const clearPlaylist = () => {
+    setPlaylist([]);
+  };
+
+  // Enhanced playSong with source parameter
+  const playSong = async (song: Song, source: PlaybackSource = 'single') => {
     // Prevent multiple rapid calls for the same song
     if (isLoadingSongRef.current) {
       console.log("Already loading a song, please wait...");
       return;
     }
+    
+    // Set the current playback source
+    setCurrentPlaybackSource(source);
     
     // If it's the same song that's already playing, just resume playback
     if (currentSong && song.ID_utworu === currentSong.ID_utworu && audioRef.current) {
@@ -505,8 +570,14 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
         volume,
         isLooping,
         playlist,
+        allSongs,
         favoriteSongs,
+        favoriteDetails,
+        currentPlaybackSource,
         playSong,
+        addToPlaylist,
+        removeFromPlaylist,
+        clearPlaylist,
         togglePlayPause,
         seekTo,
         setVolume,

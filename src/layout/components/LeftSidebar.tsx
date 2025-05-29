@@ -1,5 +1,5 @@
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Music, Heart, ListMusic, ChevronDown, ChevronUp, Play, Pause, Volume2, VolumeX, Volume1, Repeat } from "lucide-react"
+import { Music, Heart, ListMusic, ChevronDown, ChevronUp, Play, Pause, Volume2, VolumeX, Volume1, Repeat, List, ListPlus } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useAuth } from "@/context/AuthContext"
 import { useAudioPlayer } from "@/context/AudioPlayerContext"
@@ -23,14 +23,15 @@ const LeftSidebar = () => {
     isPlaying, 
     currentTime, 
     duration, 
-    playlist, 
+    playlist, // This is now our playback queue
     favoriteSongs,
     volume,
     isLooping,
     playSong, 
     togglePlayPause,
     toggleLoop,
-    setVolume
+    setVolume,
+    addToPlaylist
   } = useAudioPlayer();
   
   // Lists state
@@ -111,6 +112,18 @@ const LeftSidebar = () => {
     if (volume === 0) return <VolumeX size={14} />;
     if (volume < 0.5) return <Volume1 size={14} />;
     return <Volume2 size={14} />;
+  };
+
+  // Modified to handle playlist song click with explicit source
+  const handlePlaylistSongClick = (song: Song) => {
+    console.log("Playing from queue:", song.nazwa_utworu);
+    playSong(song, 'playlist');
+  };
+
+  // Modified to handle favorites song click with explicit source
+  const handleFavoriteSongClick = (song: Song) => {
+    console.log("Playing from favorites:", song.nazwa_utworu);
+    playSong(song, 'favorites');
   };
 
   return (
@@ -231,7 +244,7 @@ const LeftSidebar = () => {
                         className={`px-4 py-2 text-sm hover:bg-zinc-800 cursor-pointer flex items-center justify-between ${
                           currentSong?.ID_utworu === song.ID_utworu ? 'bg-zinc-800' : ''
                         }`}
-                        onClick={() => playSong(song)}
+                        onClick={() => handleFavoriteSongClick(song)}
                       >
                         <div className="truncate">
                           <p className="text-sm text-white truncate">{song.nazwa_utworu}</p>
@@ -257,15 +270,15 @@ const LeftSidebar = () => {
           )}
         </div>
         
-        {/* Current Playlist Section */}
+        {/* Playback Queue Section - renamed from "Current Playlist" */}
         <div className="flex-1 flex flex-col">
           <div 
             className="flex items-center justify-between p-3 bg-zinc-800 cursor-pointer hover:bg-zinc-750"
             onClick={() => setPlaylistOpen(!playlistOpen)}
           >
             <div className="flex items-center">
-              <ListMusic size={16} className="text-blue-500 mr-2" />
-              <span className="text-white text-sm font-medium">Obecna playlista</span>
+              <ListPlus size={16} className="text-green-500 mr-2" />
+              <span className="text-white text-sm font-medium">Kolejka odtwarzania</span>
             </div>
             {playlistOpen ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
           </div>
@@ -275,36 +288,42 @@ const LeftSidebar = () => {
               <ScrollArea className="h-[calc(100vh-350px)]">
                 {!playlist || playlist.length === 0 ? (
                   <div className="py-3 px-4 text-sm text-gray-400 text-center">
-                    Brak utworów na playliście
+                    <p>Brak utworów w kolejce</p>
+                    <p className="mt-1 text-xs">Dodaj utwory za pomocą przycisku "+" na głównej stronie</p>
                   </div>
                 ) : (
-                  <ul className="divide-y divide-zinc-700/50">
-                    {playlist.map((song) => (
-                      <li 
-                        key={song.ID_utworu}
-                        className={`px-4 py-2 text-sm hover:bg-zinc-800 cursor-pointer flex items-center justify-between ${
-                          currentSong?.ID_utworu === song.ID_utworu ? 'bg-zinc-800' : ''
-                        }`}
-                        onClick={() => playSong(song)}
-                      >
-                        <div className="truncate">
-                          <p className="text-sm text-white truncate">{song.nazwa_utworu}</p>
-                          <p className="text-xs text-gray-400 truncate">{song.Autor.kryptonim_artystyczny}</p>
-                        </div>
-                        {currentSong?.ID_utworu === song.ID_utworu ? (
-                          <div className="flex-shrink-0 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
-                            {isPlaying ? (
-                              <span className="w-2 h-2 bg-white rounded-full"></span>
-                            ) : (
-                              <Play size={8} className="text-white" />
-                            )}
+                  <div>
+                    <ul className="divide-y divide-zinc-700/50">
+                      {playlist.map((song, index) => (
+                        <li 
+                          key={`${song.ID_utworu}-${index}`} 
+                          className={`px-4 py-2 text-sm hover:bg-zinc-800 cursor-pointer flex items-center justify-between ${
+                            currentSong?.ID_utworu === song.ID_utworu ? 'bg-zinc-800' : ''
+                          }`}
+                          onClick={() => handlePlaylistSongClick(song)}
+                        >
+                          <div className="truncate flex items-center">
+                            <span className="text-xs text-gray-500 mr-2 w-5 text-right">{index + 1}.</span>
+                            <div>
+                              <p className="text-sm text-white truncate">{song.nazwa_utworu}</p>
+                              <p className="text-xs text-gray-400 truncate">{song.Autor.kryptonim_artystyczny}</p>
+                            </div>
                           </div>
-                        ) : (
-                          <Play size={14} className="text-blue-400 flex-shrink-0" />
-                        )}
-                      </li>
-                    ))}
-                  </ul>
+                          {currentSong?.ID_utworu === song.ID_utworu ? (
+                            <div className="flex-shrink-0 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                              {isPlaying ? (
+                                <span className="w-2 h-2 bg-white rounded-full"></span>
+                              ) : (
+                                <Play size={8} className="text-white" />
+                              )}
+                            </div>
+                          ) : (
+                            <Play size={14} className="text-blue-400 flex-shrink-0" />
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </ScrollArea>
             </div>

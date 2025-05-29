@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAudioPlayer } from "@/context/AudioPlayerContext";
 import { useAuth } from "@/context/AuthContext";
+import { Plus } from "lucide-react";
 import axios from "axios";
 
 interface Song {
@@ -23,9 +24,10 @@ const HomePage = () => {
     duration,
     volume,
     isLooping,
-    playlist,
+    allSongs, // Use allSongs instead of playlist
     favoriteSongs,
     playSong,
+    addToPlaylist,
     togglePlayPause,
     seekTo,
     setVolume,
@@ -37,23 +39,22 @@ const HomePage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [isSearchResults, setIsSearchResults] = useState(false);
-  const [songs, setSongs] = useState<Song[]>(playlist);
+  const [songs, setSongs] = useState<Song[]>(allSongs);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [isVolumeVisible, setIsVolumeVisible] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
   const [audioError, setAudioError] = useState("");
 
-  // Initialize local song list with context playlist
+  // Initialize local song list with all available songs
   useEffect(() => {
-    if (playlist.length > 0) {
-      setSongs(playlist);
+    if (allSongs.length > 0) {
+      setSongs(allSongs);
       setLoading(false);
     } else {
-      // The playlist will be loaded by the AudioPlayerContext
       setLoading(false);
     }
-  }, [playlist]);
+  }, [allSongs]);
 
   // Format time helper function
   const formatTime = (time: number) => {
@@ -73,14 +74,14 @@ const HomePage = () => {
     
     // Reset to original list if search query is cleared
     if (e.target.value === "" && isSearchResults) {
-      setSongs(playlist);
+      setSongs(allSongs);
       setIsSearchResults(false);
     }
   };
 
   const handleSearch = () => {
     if (!searchQuery.trim()) {
-      setSongs(playlist);
+      setSongs(allSongs);
       setIsSearchResults(false);
       return;
     }
@@ -88,7 +89,7 @@ const HomePage = () => {
     setIsSearching(true);
     
     // Filter songs locally based on search query
-    const filteredResults = playlist.filter(song => 
+    const filteredResults = allSongs.filter(song => 
       song.nazwa_utworu.toLowerCase().includes(searchQuery.toLowerCase()) ||
       song.Autor.kryptonim_artystyczny.toLowerCase().includes(searchQuery.toLowerCase())
     );
@@ -109,11 +110,32 @@ const HomePage = () => {
     setAudioError("");
     
     try {
-      await playSong(song);
+      // Explicitly set source as 'single' for homepage playback
+      await playSong(song, 'single');
+      console.log("Playing single song from homepage");
     } catch (error) {
       setAudioError("Nie można załadować pliku audio. Spróbuj ponownie później.");
     } finally {
       setAudioLoading(false);
+    }
+  };
+  
+  // Add this new function to handle adding a song to playlist
+  const handleAddToPlaylist = (e: React.MouseEvent, song: Song) => {
+    e.stopPropagation(); // Prevent triggering the song play
+    addToPlaylist(song);
+    
+    // Optional: Show a brief confirmation message
+    const songElement = e.currentTarget.parentElement?.parentElement;
+    if (songElement) {
+      const confirmElem = document.createElement('span');
+      confirmElem.className = 'text-green-400 text-xs absolute right-16';
+      confirmElem.textContent = 'Dodano do listy';
+      songElement.appendChild(confirmElem);
+      
+      setTimeout(() => {
+        songElement.removeChild(confirmElem);
+      }, 1500);
     }
   };
 
@@ -304,6 +326,15 @@ const HomePage = () => {
                       <p className="text-sm text-gray-400">{song.Autor.kryptonim_artystyczny} • {song.data_wydania}</p>
                     </div>
                     <div className="flex items-center space-x-3">
+                      {/* Add to playlist button */}
+                      <button 
+                        onClick={(e) => handleAddToPlaylist(e, song)}
+                        className="p-1 text-gray-400 hover:text-green-400 transition"
+                        title="Dodaj do playlisty"
+                      >
+                        <Plus size={18} />
+                      </button>
+                      
                       {/* Heart/Favorite button */}
                       <button 
                         onClick={(e) => {
