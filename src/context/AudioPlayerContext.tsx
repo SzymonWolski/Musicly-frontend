@@ -37,28 +37,31 @@ interface AudioPlayerContextType {
   setVolume: (volume: number) => void;
   toggleLoop: () => void;
   toggleFavorite: (songId: number) => Promise<void>;
+  currentSongIndex: number; // Index of the current song in the playlist
 }
 
 const AudioPlayerContext = createContext<AudioPlayerContextType | undefined>(undefined);
 
 export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
   const { token } = useAuth();
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(1);
   const [isLooping, setIsLooping] = useState(false);
-  const [playlist, setPlaylist] = useState<Song[]>([]); // Initialize empty playlist/queue
+  const [playlist, setPlaylist] = useState<Song[]>([]);
   const [allSongs, setAllSongs] = useState<Song[]>([]); // Store all available songs
   const [favoriteSongs, setFavoriteSongs] = useState<number[]>([]);
   const [favoriteDetails, setFavoriteDetails] = useState<Song[]>([]);
   const [currentPlaybackSource, setCurrentPlaybackSource] = useState<PlaybackSource>('single');
+  const [currentSongIndex, setCurrentSongIndex] = useState<number>(-1);
   const animationRef = useRef<number | null>(null);
 
   // Add a new ref to track if we're currently loading a song
   const isLoadingSongRef = useRef(false);
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Initialize audio element
   useEffect(() => {
@@ -339,6 +342,7 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
   // Add a function to clear the playlist
   const clearPlaylist = () => {
     setPlaylist([]);
+    setCurrentSongIndex(-1);
   };
 
   // Enhanced playSong with source parameter
@@ -567,6 +571,34 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     />
   );
 
+  // Add event listener to handle song ending
+  useEffect(() => {
+    const audioElement = audioRef.current;
+    
+    const handleSongEnd = () => {
+      // When current song ends, play the next one if available
+      if (currentSongIndex < playlist.length - 1) {
+        const nextSong = playlist[currentSongIndex + 1];
+        setCurrentSongIndex(currentSongIndex + 1);
+        playSong(nextSong, 'playlist');
+      } else {
+        // End of playlist reached
+        setCurrentSong(null);
+        setIsPlaying(false);
+      }
+    };
+
+    if (audioElement) {
+      audioElement.addEventListener('ended', handleSongEnd);
+    }
+
+    return () => {
+      if (audioElement) {
+        audioElement.removeEventListener('ended', handleSongEnd);
+      }
+    };
+  }, [currentSongIndex, playlist]);
+
   return (
     <AudioPlayerContext.Provider
       value={{
@@ -589,7 +621,8 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
         seekTo,
         setVolume,
         toggleLoop,
-        toggleFavorite
+        toggleFavorite,
+        currentSongIndex,
       }}
     >
       {audioElement}

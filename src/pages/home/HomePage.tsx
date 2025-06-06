@@ -35,6 +35,7 @@ const HomePage = () => {
     favoriteSongs,
     playSong,
     addToPlaylist,
+    clearPlaylist, // Add this import
     togglePlayPause,
     seekTo,
     setVolume,
@@ -408,6 +409,24 @@ const HomePage = () => {
     } catch (error) {
       console.error('Error deleting playlist:', error);
       alert('Nie udało się usunąć playlisty. Spróbuj ponownie.');
+    }
+  };
+
+  // Handle playing all songs in a playlist
+  const handlePlayAllSongs = () => {
+    if (!selectedPlaylist || playlistSongs.length === 0) return;
+    
+    // First clear the current playlist/queue
+    clearPlaylist();
+    
+    // Add all songs to the queue
+    playlistSongs.forEach(song => {
+      addToPlaylist(song);
+    });
+    
+    // Start playback with the first song
+    if (playlistSongs.length > 0) {
+      playSong(playlistSongs[0], 'playlist');
     }
   };
 
@@ -848,13 +867,28 @@ const HomePage = () => {
                       ({selectedPlaylist.songCount} utwor{selectedPlaylist.songCount === 1 ? '' : selectedPlaylist.songCount < 5 ? 'y' : 'ów'})
                     </span>
                   </div>
-                  <button
-                    onClick={handleDeletePlaylist}
-                    className="px-3 py-1 text-sm bg-red-600 bg-opacity-70 text-white rounded hover:bg-red-700 hover:bg-opacity-90 transition"
-                    title="Usuń playlistę"
-                  >
-                    Usuń playlistę
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handlePlayAllSongs}
+                      disabled={playlistSongs.length === 0}
+                      className={`px-3 py-1 text-sm bg-green-600 bg-opacity-70 text-white rounded hover:bg-green-700 hover:bg-opacity-90 transition flex items-center ${
+                        playlistSongs.length === 0 ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                      title="Odtwórz wszystkie utwory"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                      </svg>
+                      Odtwórz wszystkie
+                    </button>
+                    <button
+                      onClick={handleDeletePlaylist}
+                      className="px-3 py-1 text-sm bg-red-600 bg-opacity-70 text-white rounded hover:bg-red-700 hover:bg-opacity-90 transition"
+                      title="Usuń playlistę"
+                    >
+                      Usuń playlistę
+                    </button>
+                  </div>
                 </div>
 
                 {loadingPlaylistSongs ? (
