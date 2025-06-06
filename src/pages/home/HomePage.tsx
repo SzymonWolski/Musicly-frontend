@@ -375,6 +375,42 @@ const HomePage = () => {
     }
   };
 
+  // Handle deleting an entire playlist
+  const handleDeletePlaylist = async () => {
+    if (!selectedPlaylist) return;
+    
+    // Confirm deletion with the user
+    const isConfirmed = window.confirm(`Czy na pewno chcesz usunąć playlistę "${selectedPlaylist.name}"? Ta operacja jest nieodwracalna.`);
+    
+    if (!isConfirmed) return;
+    
+    try {
+      await axios.delete(`http://localhost:5000/playlists/${selectedPlaylist.id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      // Remove the playlist from the lists
+      setUserPlaylists(prevPlaylists => 
+        prevPlaylists.filter(playlist => playlist.id !== selectedPlaylist.id)
+      );
+      setFilteredPlaylists(prevPlaylists => 
+        prevPlaylists.filter(playlist => playlist.id !== selectedPlaylist.id)
+      );
+      
+      // Close the playlist view
+      closePlaylistContent();
+      
+      // Show success notification
+      alert('Playlista została usunięta.');
+      
+    } catch (error) {
+      console.error('Error deleting playlist:', error);
+      alert('Nie udało się usunąć playlisty. Spróbuj ponownie.');
+    }
+  };
+
   return (
     <div className="flex flex-col h-full rounded-lg" 
       style={{
@@ -797,19 +833,28 @@ const HomePage = () => {
             {selectedPlaylist ? (
               /* Playlist content view */
               <div className="flex flex-col h-full">
-                <div className="flex items-center p-4 border-b border-gray-700">
-                  <button 
-                    onClick={closePlaylistContent}
-                    className="mr-3 text-gray-400 hover:text-white transition"
+                <div className="flex items-center justify-between p-4 border-b border-gray-700">
+                  <div className="flex items-center">
+                    <button 
+                      onClick={closePlaylistContent}
+                      className="mr-3 text-gray-400 hover:text-white transition"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                    <h2 className="text-xl font-bold text-white">{selectedPlaylist.name}</h2>
+                    <span className="ml-2 text-sm text-gray-400">
+                      ({selectedPlaylist.songCount} utwor{selectedPlaylist.songCount === 1 ? '' : selectedPlaylist.songCount < 5 ? 'y' : 'ów'})
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleDeletePlaylist}
+                    className="px-3 py-1 text-sm bg-red-600 bg-opacity-70 text-white rounded hover:bg-red-700 hover:bg-opacity-90 transition"
+                    title="Usuń playlistę"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
-                    </svg>
+                    Usuń playlistę
                   </button>
-                  <h2 className="text-xl font-bold text-white">{selectedPlaylist.name}</h2>
-                  <span className="ml-2 text-sm text-gray-400">
-                    ({selectedPlaylist.songCount} utwor{selectedPlaylist.songCount === 1 ? '' : selectedPlaylist.songCount < 5 ? 'y' : 'ów'})
-                  </span>
                 </div>
 
                 {loadingPlaylistSongs ? (
