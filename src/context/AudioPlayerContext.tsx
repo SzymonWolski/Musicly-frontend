@@ -93,7 +93,9 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
         // If we had a song playing, try to restore it
         if (songId) {
           axios.get(`http://localhost:5000/files/song/${songId}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
+           headers: {
+            'Authorization': `Bearer ${token}`
+          } 
           })
           .then(response => {
             const song = response.data;
@@ -265,6 +267,11 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
 
   // API functions
   const fetchFavorites = async () => {
+    if (!token) {
+      console.log("No token available, skipping favorites fetch");
+      return;
+    }
+
     try {
       const response = await axios.get("http://localhost:5000/favorites", {
         headers: {
