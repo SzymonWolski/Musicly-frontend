@@ -61,6 +61,12 @@ const HomePage = () => {
   const [loadingPlaylists, setLoadingPlaylists] = useState(false);
   const [filteredPlaylists, setFilteredPlaylists] = useState<Playlist[]>([]);
   
+  // Selected playlist state
+  const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
+  const [playlistSongs, setPlaylistSongs] = useState<Song[]>([]);
+  const [loadingPlaylistSongs, setLoadingPlaylistSongs] = useState(false);
+  const [playlistError, setPlaylistError] = useState('');
+  
   // Create playlist modal state
   const [isCreatePlaylistModalOpen, setIsCreatePlaylistModalOpen] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
@@ -290,6 +296,82 @@ const HomePage = () => {
       setSongs(allSongs);
     } else {
       setFilteredPlaylists(userPlaylists);
+    }
+  };
+
+  // Handle opening playlist content view
+  const openPlaylistContent = async (playlist: Playlist) => {
+    setSelectedPlaylist(playlist);
+    setLoadingPlaylistSongs(true);
+    setPlaylistError('');
+    
+    try {
+      const response = await axios.get(`http://localhost:5000/playlists/${playlist.id}/songs`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.data && Array.isArray(response.data.songs)) {
+        setPlaylistSongs(response.data.songs);
+      } else {
+        setPlaylistSongs([]);
+      }
+    } catch (error) {
+      console.error('Error fetching playlist songs:', error);
+      setPlaylistError('Nie udało się załadować utworów z playlisty.');
+    } finally {
+      setLoadingPlaylistSongs(false);
+    }
+  };
+  
+  // Handle closing playlist content view
+  const closePlaylistContent = () => {
+    setSelectedPlaylist(null);
+    setPlaylistSongs([]);
+  };
+
+  // Handle removing a song from playlist
+  const handleRemoveSongFromPlaylist = async (songId: number) => {
+    if (!selectedPlaylist) return;
+    
+    try {
+      await axios.delete(`http://localhost:5000/playlists/${selectedPlaylist.id}/songs/${songId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      // Update the UI by removing the song from the list
+      setPlaylistSongs(prevSongs => prevSongs.filter(song => song.ID_utworu !== songId));
+      
+      // Update the song count
+      if (selectedPlaylist) {
+        setSelectedPlaylist({
+          ...selectedPlaylist,
+          songCount: selectedPlaylist.songCount - 1
+        });
+        
+        // Also update in the playlists list
+        setUserPlaylists(prevPlaylists => 
+          prevPlaylists.map(playlist => 
+            playlist.id === selectedPlaylist.id 
+              ? { ...playlist, songCount: playlist.songCount - 1 }
+              : playlist
+          )
+        );
+        setFilteredPlaylists(prevPlaylists => 
+          prevPlaylists.map(playlist => 
+            playlist.id === selectedPlaylist.id 
+              ? { ...playlist, songCount: playlist.songCount - 1 } 
+              : playlist
+          )
+        );
+      }
+      
+    } catch (error) {
+      console.error('Error removing song from playlist:', error);
+      alert('Nie udało się usunąć utworu z playlisty. Spróbuj ponownie.');
     }
   };
 
@@ -591,7 +673,10 @@ const HomePage = () => {
                             
                             {/* Playlist dropdown menu */}
                             {openDropdownId === song.ID_utworu && (
-                              <div className="absolute right-0 mt-1 w-56 bg-zinc-800 rounded-md shadow-lg z-10">
+                              <div 
+                                className="absolute right-0 mt-1 w-56 bg-zinc-800 rounded-md shadow-lg z-10"
+                                onClick={(e) => e.stopPropagation()} // Add this line to prevent click-through
+                              >
                                 <div className="p-2 border-b border-zinc-700 flex justify-between items-center">
                                   <span className="text-white text-sm font-medium">Dodaj do playlisty</span>
                                   <button 
@@ -709,49 +794,155 @@ const HomePage = () => {
               </div>
             </div>
 
-            <h3 className="text-lg font-semibold text-white mb-2 px-4 pt-2">
-              {isSearchResults ? "Znalezione playlisty" : "Twoje playlisty"}
-            </h3>
-            
-            {loadingPlaylists ? (
-              <div className="flex justify-center items-center h-40">
-                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
-              </div>
-            ) : filteredPlaylists.length === 0 ? (
-              <div className="bg-black bg-opacity-30 rounded-lg text-center text-gray-400 p-8">
-                <ListMusic size={48} className="mx-auto mb-2 text-gray-500" />
-                {isSearchResults ? (
-                  "Nie znaleziono pasujących playlist"
+            {selectedPlaylist ? (
+              /* Playlist content view */
+              <div className="flex flex-col h-full">
+                <div className="flex items-center p-4 border-b border-gray-700">
+                  <button 
+                    onClick={closePlaylistContent}
+                    className="mr-3 text-gray-400 hover:text-white transition"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                  <h2 className="text-xl font-bold text-white">{selectedPlaylist.name}</h2>
+                  <span className="ml-2 text-sm text-gray-400">
+                    ({selectedPlaylist.songCount} utwor{selectedPlaylist.songCount === 1 ? '' : selectedPlaylist.songCount < 5 ? 'y' : 'ów'})
+                  </span>
+                </div>
+
+                {loadingPlaylistSongs ? (
+                  <div className="flex-1 flex justify-center items-center">
+                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
+                  </div>
+                ) : playlistError ? (
+                  <div className="flex-1 flex justify-center items-center">
+                    <div className="text-red-500">{playlistError}</div>
+                  </div>
+                ) : playlistSongs.length === 0 ? (
+                  <div className="flex-1 flex flex-col justify-center items-center text-center p-4">
+                    <Music size={48} className="mb-2 text-gray-500" />
+                    <p className="text-gray-400">Ta playlista jest pusta</p>
+                    <p className="text-sm text-gray-500 mt-1">Dodaj utwory do tej playlisty</p>
+                  </div>
                 ) : (
-                  <>
-                    <p>Nie masz jeszcze żadnych playlist</p>
-                    <p className="text-sm mt-2">Stwórz nową playlistę, aby organizować swoją muzykę</p>
-                    <button
-                      className="mt-4 px-4 py-2 bg-blue-600 bg-opacity-80 text-white rounded hover:bg-blue-700"
-                      onClick={openCreatePlaylistModal}
-                    >
-                      Stwórz playlistę
-                    </button>
-                  </>
+                  <div className="flex-1 overflow-y-auto">
+                    <ul className="divide-y divide-gray-700">
+                      {playlistSongs.map((song) => (
+                        <li 
+                          key={song.ID_utworu} 
+                          className={`px-4 py-3 hover:bg-gray-700 hover:bg-opacity-50 cursor-pointer transition ${
+                            currentSong?.ID_utworu === song.ID_utworu ? 'bg-gray-700 bg-opacity-50' : ''
+                          }`}
+                          onClick={() => handlePlayThisSong(song)}
+                        >
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <p className="font-medium text-white">{song.nazwa_utworu}</p>
+                              <p className="text-sm text-gray-400">{song.Autor.kryptonim_artystyczny} • {song.data_wydania}</p>
+                            </div>
+                            <div className="flex items-center space-x-3">
+                              {/* Remove from playlist button - Updated to use the new function */}
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemoveSongFromPlaylist(song.ID_utworu);
+                                }}
+                                className="p-1 text-gray-400 hover:text-red-400 transition"
+                                title="Usuń z playlisty"
+                              >
+                                <X size={18} />
+                              </button>
+                              
+                              {/* Heart/Favorite button */}
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleFavorite(song.ID_utworu);
+                                }}
+                                className={`p-1 transition ${
+                                  favoriteSongs.includes(song.ID_utworu) 
+                                    ? 'text-red-500 hover:text-red-400' 
+                                    : 'text-gray-400 hover:text-red-400'
+                                }`}
+                                title={favoriteSongs.includes(song.ID_utworu) ? "Usuń z ulubionych" : "Dodaj do ulubionych"}
+                              >
+                                {favoriteSongs.includes(song.ID_utworu) ? (
+                                  // Filled heart
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
+                                  </svg>
+                                ) : (
+                                  // Empty heart
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                                  </svg>
+                                )}
+                              </button>
+                              
+                              {/* Play button */}
+                              <button className="p-1 text-blue-400 hover:text-blue-300 transition">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
-                {filteredPlaylists.map((playlist) => (
-                  <div 
-                    key={playlist.id}
-                    className="bg-zinc-800 bg-opacity-60 rounded-lg overflow-hidden hover:bg-opacity-80 transition cursor-pointer"
-                  >
-                    <div className="h-32 bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center">
-                      <ListMusic size={48} className="text-white" />
-                    </div>
-                    <div className="p-3">
-                      <h4 className="font-medium text-white truncate">{playlist.name}</h4>
-                      <p className="text-sm text-gray-400">{playlist.songCount} utwor{playlist.songCount === 1 ? '' : playlist.songCount < 5 ? 'y' : 'ów'}</p>
-                    </div>
+              <>
+                <h3 className="text-lg font-semibold text-white mb-2 px-4 pt-2">
+                  {isSearchResults ? "Znalezione playlisty" : "Twoje playlisty"}
+                </h3>
+                
+                {loadingPlaylists ? (
+                  <div className="flex justify-center items-center h-40">
+                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
                   </div>
-                ))}
-              </div>
+                ) : filteredPlaylists.length === 0 ? (
+                  <div className="bg-black bg-opacity-30 rounded-lg text-center text-gray-400 p-8">
+                    <ListMusic size={48} className="mx-auto mb-2 text-gray-500" />
+                    {isSearchResults ? (
+                      "Nie znaleziono pasujących playlist"
+                    ) : (
+                      <>
+                        <p>Nie masz jeszcze żadnych playlist</p>
+                        <p className="text-sm mt-2">Stwórz nową playlistę, aby organizować swoją muzykę</p>
+                        <button
+                          className="mt-4 px-4 py-2 bg-blue-600 bg-opacity-80 text-white rounded hover:bg-blue-700"
+                          onClick={openCreatePlaylistModal}
+                        >
+                          Stwórz playlistę
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+                    {filteredPlaylists.map((playlist) => (
+                      <div 
+                        key={playlist.id}
+                        className="bg-zinc-800 bg-opacity-60 rounded-lg overflow-hidden hover:bg-opacity-80 transition cursor-pointer"
+                        onClick={() => openPlaylistContent(playlist)}
+                      >
+                        <div className="h-32 bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center">
+                          <ListMusic size={48} className="text-white" />
+                        </div>
+                        <div className="p-3">
+                          <h4 className="font-medium text-white truncate">{playlist.name}</h4>
+                          <p className="text-sm text-gray-400">{playlist.songCount} utwor{playlist.songCount === 1 ? '' : playlist.songCount < 5 ? 'y' : 'ów'}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
