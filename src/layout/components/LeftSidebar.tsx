@@ -1,5 +1,5 @@
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Music, Heart, ListMusic, ChevronDown, ChevronUp, Play, Pause, Volume2, VolumeX, Volume1, Repeat, List, ListPlus } from "lucide-react"
+import { Music, Heart, ChevronDown, ChevronUp, Play, Pause, Volume2, VolumeX, Volume1, Repeat, ListPlus } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useAuth } from "@/context/AuthContext"
 import { useAudioPlayer } from "@/context/AudioPlayerContext"
@@ -30,8 +30,7 @@ const LeftSidebar = () => {
     playSong, 
     togglePlayPause,
     toggleLoop,
-    setVolume,
-    addToPlaylist
+    setVolume
   } = useAudioPlayer();
   
   // Lists state

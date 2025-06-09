@@ -1,5 +1,5 @@
 // src/App.tsx
-import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import MainLayout from "./layout/MainLayout";
 import HomePage from "./pages/home/HomePage";
 import AlbumStrona from "./pages/album/AlbumStrona";

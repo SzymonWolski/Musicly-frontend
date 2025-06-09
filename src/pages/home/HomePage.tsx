@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useAudioPlayer } from "@/context/AudioPlayerContext";
 import { useAuth } from "@/context/AuthContext";
-import { Plus, Search, Music, ListMusic, ChevronDown, X } from "lucide-react";
+import { Plus, Search, Music, ListMusic, X } from "lucide-react";
 import axios from "axios";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -35,7 +35,7 @@ const HomePage = () => {
     favoriteSongs,
     playSong,
     addToPlaylist,
-    clearPlaylist, // Add this import
+    clearPlaylist,
     togglePlayPause,
     seekTo,
     setVolume,
@@ -49,7 +49,7 @@ const HomePage = () => {
   const [isSearchResults, setIsSearchResults] = useState(false);
   const [songs, setSongs] = useState<Song[]>(allSongs);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error] = useState("");
   const [isVolumeVisible, setIsVolumeVisible] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
   const [audioError, setAudioError] = useState("");
