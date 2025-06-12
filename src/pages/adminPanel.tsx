@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -24,11 +24,20 @@ interface Song {
   };
 }
 
+// Add this interface for user management
+interface User {
+  ID_uzytkownik: number;
+  nick: string;
+  email: string;
+  isadmin: boolean;
+}
+
 const AdminPanel = () => {
   const { user, isadmin } = useAuth();
   const navigate = useNavigate();
   const [isAddingMode, setIsAddingMode] = useState(false);
   const [isDeletingMode, setIsDeletingMode] = useState(false);
+  const [isUserManagementMode, setIsUserManagementMode] = useState(false); // New mode for user management
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<BackendErrors>({});
   const [songFile, setSongFile] = useState<File | null>(null);
@@ -40,12 +49,20 @@ const AdminPanel = () => {
   const [songToDelete, setSongToDelete] = useState<Song | null>(null);
   const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [isLoadingSongs, setIsLoadingSongs] = useState(false);
   
   const [songData, setSongData] = useState<SongFormData>({
     nazwa_utworu: "",
     data_wydania: "",
     kryptonim_artystyczny: ""
   });
+
+  // User management states
+  const [users, setUsers] = useState<User[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<User[]>([]); // New state for filtered users
+  const [userSearchQuery, setUserSearchQuery] = useState(""); // New state for user search
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [userError, setUserError] = useState("");
 
   // Redirect if not admin
   React.useEffect(() => {
@@ -56,10 +73,23 @@ const AdminPanel = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setSongData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    
+    // For year field, only accept numbers and limit to 4 characters
+    if (name === 'data_wydania') {
+      // Only allow digits (0-9)
+      const onlyNums = value.replace(/[^0-9]/g, '');
+      // Limit to 4 characters
+      const truncated = onlyNums.slice(0, 4);
+      setSongData(prev => ({
+        ...prev,
+        [name]: truncated
+      }));
+    } else {
+      setSongData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
     
     if (errors[name]) {
       setErrors(prev => {
@@ -88,9 +118,42 @@ const AdminPanel = () => {
     setSearchQuery(e.target.value);
   };
 
+  // Fetch all songs when entering deletion mode
+  useEffect(() => {
+    if (isDeletingMode) {
+      fetchAllSongs();
+    }
+  }, [isDeletingMode]);
+
+  // Function to fetch all songs from the API
+  const fetchAllSongs = async () => {
+    setIsLoadingSongs(true);
+    setDeleteError("");
+    
+    try {
+      const response = await axios.get(`http://localhost:5000/files/list`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem("token")}`
+        }
+      });
+
+      if (response.data && response.data.utwory) {
+        setSearchResults(response.data.utwory);
+      } else {
+        setSearchResults([]);
+      }
+    } catch (error) {
+      console.error("Error fetching songs:", error);
+      setDeleteError("Błąd podczas pobierania piosenek. Spróbuj ponownie później.");
+    } finally {
+      setIsLoadingSongs(false);
+    }
+  };
+
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
-      setSearchResults([]);
+      // If search query is empty, show all songs
+      fetchAllSongs();
       return;
     }
 
@@ -173,6 +236,34 @@ const AdminPanel = () => {
     setIsSubmitting(true);
     setErrors({});
 
+    if (songData.nazwa_utworu.length > 50) {
+      setErrors(prev => ({
+        ...prev,
+        nazwa_utworu: "Tytuł piosenki nie może przekraczać 50 znaków"
+      }));
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (songData.kryptonim_artystyczny.length > 50) {
+      setErrors(prev => ({
+        ...prev,
+        kryptonim_artystyczny: "Nazwa artysty nie może przekraczać 50 znaków"
+      }));
+      setIsSubmitting(false);
+      return;
+    }
+
+    // Validate year format (must be numeric and max 4 characters)
+    if (!/^\d{1,4}$/.test(songData.data_wydania)) {
+      setErrors(prev => ({
+        ...prev,
+        data_wydania: "Rok wydania musi być liczbą do 4 cyfr"
+      }));
+      setIsSubmitting(false);
+      return;
+    }
+
     if (!songFile) {
       setErrors({ song: "Proszę wybrać plik z piosenką" });
       setIsSubmitting(false);
@@ -195,7 +286,7 @@ const AdminPanel = () => {
       });
       
       if (response.data.success) {
-        alert("Piosenka została dodana pomyślnie!");
+        alert(`Piosenka "${songData.nazwa_utworu}" została dodana pomyślnie!`);
         setSongData({
           nazwa_utworu: "",
           data_wydania: "",
@@ -218,12 +309,124 @@ const AdminPanel = () => {
     }
   };
 
+  // Function to fetch all users
+  const fetchAllUsers = async () => {
+    setIsLoadingUsers(true);
+    setUserError("");
+    
+    try {
+      const response = await axios.get(`http://localhost:5000/users/list`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem("token")}`
+        }
+      });
+
+      if (response.data && response.data.users) {
+        setUsers(response.data.users);
+        setFilteredUsers(response.data.users); // Initialize filtered users with all users
+      } else {
+        setUsers([]);
+        setFilteredUsers([]);
+      }
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      setUserError("Błąd podczas pobierania użytkowników. Spróbuj ponownie później.");
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  };
+  
+  // Handle user search input change
+  const handleUserSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const query = e.target.value;
+    setUserSearchQuery(query);
+    
+    // Filter users based on search query
+    if (!query.trim()) {
+      setFilteredUsers(users); // Show all users when search is cleared
+    } else {
+      const filtered = users.filter(user => 
+        user.nick.toLowerCase().includes(query.toLowerCase()) || 
+        user.email.toLowerCase().includes(query.toLowerCase())
+      );
+      setFilteredUsers(filtered);
+    }
+  };
+
+  // Load users when entering user management mode
+  useEffect(() => {
+    if (isUserManagementMode) {
+      fetchAllUsers();
+    }
+  }, [isUserManagementMode]);
+
+  // Function to toggle admin status
+  const toggleAdminStatus = async (userId: number, currentStatus: boolean) => {
+    try {
+      const response = await axios.put(
+        `http://localhost:5000/users/toggleAdmin/${userId}`,
+        { isAdmin: !currentStatus },
+        {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem("token")}`
+          }
+        }
+      );
+
+      if (response.data && response.data.success) {
+        // Update local users list
+        setUsers(prevUsers => 
+          prevUsers.map(user => 
+            user.ID_uzytkownik === userId 
+            ? { ...user, isadmin: !currentStatus }
+            : user
+          )
+        );
+        alert(`Uprawnienia administratora ${currentStatus ? 'odebrane' : 'nadane'}.`);
+      }
+    } catch (error) {
+      console.error("Error toggling admin status:", error);
+      alert("Wystąpił błąd podczas zmiany uprawnień. Spróbuj ponownie później.");
+    }
+  };
+
+  // Function to delete user
+  const handleDeleteUser = async (userId: number, userNick: string) => {
+    // Don't allow deleting yourself
+    if (userId === Number(user?.id)) {
+      alert("Nie możesz usunąć własnego konta!");
+      return;
+    }
+    
+    if (window.confirm(`Czy na pewno chcesz usunąć użytkownika "${userNick}"? Ta operacja jest nieodwracalna.`)) {
+      try {
+        const response = await axios.delete(
+          `http://localhost:5000/users/${userId}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem("token")}`
+            }
+          }
+        );
+
+        if (response.data && response.data.success) {
+          // Remove user from the list
+          setUsers(prevUsers => prevUsers.filter(user => user.ID_uzytkownik !== userId));
+          alert("Użytkownik został pomyślnie usunięty.");
+        }
+      } catch (error) {
+        console.error("Error deleting user:", error);
+        alert("Wystąpił błąd podczas usuwania użytkownika. Spróbuj ponownie później.");
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-800 text-white p-4">
       <div className="max-w-2xl mx-auto bg-gray-700 rounded-lg p-6 shadow-lg">
         <h1 className="text-3xl font-bold mb-6 text-center">Panel Administracyjny</h1>
         
-        {!isAddingMode && !isDeletingMode && (
+        {!isAddingMode && !isDeletingMode && !isUserManagementMode && (
           <div className="flex flex-col space-y-4">
             <div className="text-center text-yellow-500 font-bold mb-4">
               Zalogowano jako administrator: {user?.nick}
@@ -242,6 +445,14 @@ const AdminPanel = () => {
                 className="px-6 py-4 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center justify-center"
               >
                 <span className="text-xl">Usuń piosenkę</span>
+              </button>
+
+              {/* New button for user management */}
+              <button
+                onClick={() => setIsUserManagementMode(true)}
+                className="px-6 py-4 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center justify-center col-span-full"
+              >
+                <span className="text-xl">Zarządzanie użytkownikami</span>
               </button>
             </div>
             
@@ -269,7 +480,7 @@ const AdminPanel = () => {
                 <input
                   type="text"
                   name="nazwa_utworu"
-                  placeholder="Tytuł piosenki"
+                  placeholder="Tytuł piosenki (max 50 znaków)"
                   value={songData.nazwa_utworu}
                   onChange={handleChange}
                   className={`w-full p-2 rounded bg-gray-600 text-white focus:outline-none focus:ring-2 ${
@@ -277,8 +488,10 @@ const AdminPanel = () => {
                   }`}
                   required
                 />
-                {errors.nazwa_utworu && (
+                {errors.nazwa_utworu ? (
                   <p className="text-red-500 text-sm mt-1">{errors.nazwa_utworu}</p>
+                ) : (
+                  <p className="text-gray-400 text-xs mt-1">{songData.nazwa_utworu.length}/50 znaków</p>
                 )}
               </div>
               
@@ -286,7 +499,7 @@ const AdminPanel = () => {
                 <input
                   type="text"
                   name="kryptonim_artystyczny"
-                  placeholder="Artysta"
+                  placeholder="Artysta (max 50 znaków)"
                   value={songData.kryptonim_artystyczny}
                   onChange={handleChange}
                   className={`w-full p-2 rounded bg-gray-600 text-white focus:outline-none focus:ring-2 ${
@@ -294,8 +507,10 @@ const AdminPanel = () => {
                   }`}
                   required
                 />
-                {errors.kryptonim_artystyczny && (
+                {errors.kryptonim_artystyczny ? (
                   <p className="text-red-500 text-sm mt-1">{errors.kryptonim_artystyczny}</p>
+                ) : (
+                  <p className="text-gray-400 text-xs mt-1">{songData.kryptonim_artystyczny.length}/50 znaków</p>
                 )}
               </div>
               
@@ -311,9 +526,6 @@ const AdminPanel = () => {
                   }`}
                   required
                 />
-                {errors.data_wydania && (
-                  <p className="text-red-500 text-sm mt-1">{errors.data_wydania}</p>
-                )}
               </div>
               
               <div>
@@ -399,9 +611,13 @@ const AdminPanel = () => {
               </div>
               
               <div className="max-h-80 overflow-y-auto mt-4">
-                {searchResults.length === 0 ? (
+                {isLoadingSongs ? (
+                  <div className="flex justify-center items-center py-8">
+                    <div className="animate-spin h-8 w-8 border-2 border-blue-500 rounded-full border-t-transparent"></div>
+                  </div>
+                ) : searchResults.length === 0 ? (
                   <p className="text-center text-gray-400 p-4">
-                    {searchQuery ? "Nie znaleziono pasujących piosenek" : "Wyszukaj piosenki, aby zobaczyć wyniki"}
+                    {searchQuery ? "Nie znaleziono pasujących piosenek" : "Brak dostępnych piosenek"}
                   </p>
                 ) : (
                   <ul className="divide-y divide-gray-700">
@@ -462,6 +678,107 @@ const AdminPanel = () => {
                 </div>
               </div>
             )}
+          </div>
+        )}
+        
+        {/* New section for user management */}
+        {isUserManagementMode && (
+          <div>
+            <h2 className="text-2xl font-bold mb-4 text-center">Zarządzanie użytkownikami</h2>
+            
+            {userError && (
+              <div className="mb-4 p-2 bg-red-500 text-white rounded text-center">
+                {userError}
+              </div>
+            )}
+            
+            <div className="bg-gray-600 rounded-lg p-4">
+              {/* Add search input for users */}
+              <div className="mb-4">
+                <div className="flex">
+                  <input
+                    type="text"
+                    placeholder="Szukaj użytkownika po nazwie lub email"
+                    value={userSearchQuery}
+                    onChange={handleUserSearchChange}
+                    className="flex-grow p-2 rounded-l bg-gray-700 text-white border-r-0 border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <div className="px-4 py-2 bg-blue-600 text-white rounded-r flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Fixed height container with scrolling */}
+              <div className="max-h-[400px] overflow-y-auto border border-gray-700 rounded">
+                {isLoadingUsers ? (
+                  <div className="flex justify-center items-center py-8">
+                    <div className="animate-spin h-8 w-8 border-2 border-blue-500 rounded-full border-t-transparent"></div>
+                  </div>
+                ) : filteredUsers.length === 0 ? (
+                  <p className="text-center text-gray-400 p-4">
+                    {userSearchQuery ? "Nie znaleziono pasujących użytkowników" : "Brak użytkowników w systemie"}
+                  </p>
+                ) : (
+                  <table className="w-full text-left">
+                    <thead className="bg-gray-700 sticky top-0">
+                      <tr>
+                        <th className="py-2 px-4">Nick</th>
+                        <th className="py-2 px-4">Email</th>
+                        <th className="py-2 px-4">Status</th>
+                        <th className="py-2 px-4">Akcje</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredUsers.map((userItem) => (
+                        <tr key={userItem.ID_uzytkownik} className="border-b border-gray-700 hover:bg-gray-700 hover:bg-opacity-50">
+                          <td className="py-3 px-4">{userItem.nick}</td>
+                          <td className="py-3 px-4">{userItem.email}</td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-1 rounded-full text-xs ${userItem.isadmin ? 'bg-green-600' : 'bg-blue-600'}`}>
+                              {userItem.isadmin ? 'Administrator' : 'Użytkownik'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex space-x-2">
+                              <button 
+                                onClick={() => toggleAdminStatus(userItem.ID_uzytkownik, userItem.isadmin)}
+                                className={`px-3 py-1 ${userItem.isadmin ? 'bg-yellow-600' : 'bg-green-600'} text-white rounded hover:opacity-90 transition text-xs`}
+                                disabled={userItem.ID_uzytkownik === Number(user?.id)}
+                                title={userItem.ID_uzytkownik === Number(user?.id) ? "Nie możesz zmienić własnych uprawnień" : ""}
+                              >
+                                {userItem.isadmin ? 'Odbierz uprawnienia' : 'Nadaj uprawnienia'}
+                              </button>
+                              
+                              <button
+                                onClick={() => handleDeleteUser(userItem.ID_uzytkownik, userItem.nick)}
+                                className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition text-xs"
+                                disabled={userItem.ID_uzytkownik === Number(user?.id)}
+                                title={userItem.ID_uzytkownik === Number(user?.id) ? "Nie możesz usunąć własnego konta" : ""}
+                              >
+                                Usuń
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              
+              <div className="mt-6 flex justify-center">
+                <button
+                  onClick={() => setIsUserManagementMode(false)}
+                  className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition"
+                >
+                  Powrót
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

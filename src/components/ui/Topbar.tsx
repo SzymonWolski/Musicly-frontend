@@ -18,22 +18,33 @@ const TopBar = () => {
     logout();
     navigate("/"); // Przekierowanie na stronę główną po wylogowaniu
   };
+  
+  // New function to handle home button click
+  const handleHomeClick = () => {
+    // Force reload the page to refresh the song list
+    // Using navigate with replace option and then reload window
+    navigate("/", { replace: true });
+    window.location.reload();
+  };
 
   return (
     <div className="flex items-center rounded-lg justify-between bg-gray-900 text-white p-4">
       <div className="flex items-center space-x-4">
         
-        <Link to={"/"}
-            className={cn(buttonVariants(
-                    { 
-                    variant: "ghost", 
-                    className: "w-full justify-start text-white hover:bg-zinc-600"
-                    }
-            ))}>
-                      
+        {/* Changed from Link to button with onClick handler */}
+        <button
+          onClick={handleHomeClick}
+          className={cn(buttonVariants(
+            { 
+              variant: "ghost", 
+              className: "w-full justify-start text-white hover:bg-zinc-600"
+            }
+          ))}
+        >
           <HomeIcon className="mr-2 size-5 " />
           <span className="hidden md:inline">Home</span>
-        </Link>
+        </button>
+        
         <Link to={"/friends"}
             className={cn(buttonVariants(
                     { 

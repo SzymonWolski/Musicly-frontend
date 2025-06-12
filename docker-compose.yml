@@ -6,7 +6,7 @@ services:
     ports:
       - "5173:80"
     restart: unless-stopped
-    container_name: musicly-frontend
+    container_name: frontend
     # If you need to connect to a backend running outside the container
     # environment:
     #   - VITE_API_URL=http://localhost:5000

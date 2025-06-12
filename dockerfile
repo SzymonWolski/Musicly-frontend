@@ -17,7 +17,7 @@ RUN bun install
 COPY . .
 
 # Build the application
-RUN CI=true bun run build
+RUN bun run build
 
 # === Production Stage ===
 FROM nginx:alpine AS production
