@@ -83,7 +83,7 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     const savedState = localStorage.getItem('audioPlayerState');
     if (savedState) {
       try {
-        const { songId, currentTime, volume, isLooping } = JSON.parse(savedState);
+        const { volume, isLooping } = JSON.parse(savedState);
         
         // Restore settings
         setVolumeState(volume || 1);
@@ -91,25 +91,6 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
         if (audioRef.current) {
           audioRef.current.volume = volume || 1;
           audioRef.current.loop = isLooping || false;
-        }
-        
-        // If we had a song playing, try to restore it
-        if (songId) {
-          axios.get(`http://localhost:5000/files/song/${songId}`, {
-           headers: {
-            'Authorization': `Bearer ${token}`
-          } 
-          })
-          .then(response => {
-            const song = response.data;
-            setCurrentSong(song);
-            if (audioRef.current) {
-              audioRef.current.src = `http://localhost:5000/files/play/${songId}`;
-              audioRef.current.currentTime = currentTime || 0;
-              // Don't autoplay on page load, just prepare the song
-            }
-          })
-          .catch(err => console.error("Failed to restore song:", err));
         }
       } catch (error) {
         console.error("Error restoring player state:", error);
@@ -218,7 +199,6 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
   // Add a new handler for durationchange event
   const handleDurationChange = () => {
     if (audioRef.current) {
-      console.log("Duration changed:", audioRef.current.duration);
       if (!isNaN(audioRef.current.duration) && audioRef.current.duration > 0) {
         setDuration(audioRef.current.duration);
       }
