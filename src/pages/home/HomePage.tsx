@@ -251,6 +251,12 @@ const HomePage = () => {
       return;
     }
     
+    // Add character limit validation - 70 characters
+    if (newPlaylistName.trim().length > 70) {
+      setCreatePlaylistError('Nazwa playlisty nie może przekraczać 70 znaków.');
+      return;
+    }
+    
     setIsCreatingPlaylist(true);
     setCreatePlaylistError('');
     
@@ -464,9 +470,19 @@ const HomePage = () => {
                   id="playlistName"
                   value={newPlaylistName}
                   onChange={(e) => setNewPlaylistName(e.target.value)}
+                  maxLength={70} // Add maxLength attribute
                   placeholder="Wprowadź nazwę playlisty"
                   className="w-full p-2 bg-zinc-700 text-white rounded border border-zinc-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
+                {newPlaylistName.length > 0 && (
+                  <div className="flex justify-end mt-1">
+                    <span className={`text-xs ${
+                      newPlaylistName.length > 60 ? 'text-yellow-400' : 'text-gray-400'
+                    }`}>
+                      {newPlaylistName.length}/70
+                    </span>
+                  </div>
+                )}
                 {createPlaylistError && (
                   <p className="text-red-500 text-sm mt-1">{createPlaylistError}</p>
                 )}
