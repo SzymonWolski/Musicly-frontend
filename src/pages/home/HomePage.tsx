@@ -976,9 +976,21 @@ const HomePage = () => {
               </div>
             ) : (
               <>
-                <h3 className="text-lg font-semibold text-white mb-2 px-4 pt-2">
-                  {isSearchResults ? "Znalezione playlisty" : "Twoje playlisty"}
-                </h3>
+                {/* Modified to include a flex container with the New Playlist button */}
+                <div className="flex justify-between items-center px-4 pt-2 mb-2">
+                  <h3 className="text-lg font-semibold text-white">
+                    {isSearchResults ? "Znalezione playlisty" : "Twoje playlisty"}
+                  </h3>
+                  
+                  {/* Add Playlist button that's always visible */}
+                  <button
+                    onClick={openCreatePlaylistModal}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 bg-opacity-80 text-white rounded-md hover:bg-blue-700 transition text-sm"
+                  >
+                    <Plus size={16} />
+                    Nowa playlista
+                  </button>
+                </div>
                 
                 {loadingPlaylists ? (
                   <div className="flex justify-center items-center h-40">
