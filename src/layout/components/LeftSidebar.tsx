@@ -9,6 +9,7 @@ interface Song {
   ID_utworu: number;
   nazwa_utworu: string;
   data_wydania: string;
+  likes_count: number;
   Autor: {
     imie: string;
     nazwisko: string;
