@@ -9,6 +9,7 @@ interface Song {
   ID_utworu: number;
   nazwa_utworu: string;
   data_wydania: string;
+  likes_count: number;
   Autor: {
     imie: string;
     nazwisko: string;
@@ -799,6 +800,9 @@ const HomePage = () => {
                             )}
                           </div>
                           
+                          {/* Like count display */}
+                          <span className="text-sm text-gray-400">{song.likes_count}</span>
+                          
                           {/* Heart/Favorite button */}
                           <button 
                             onClick={(e) => {
@@ -949,6 +953,9 @@ const HomePage = () => {
                               >
                                 <X size={18} />
                               </button>
+                              
+                              {/* Like count display */}
+                              <span className="text-sm text-gray-400">{song.likes_count}</span>
                               
                               {/* Heart/Favorite button */}
                               <button 

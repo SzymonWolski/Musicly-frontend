@@ -9,6 +9,7 @@ interface Song {
   ID_utworu: number;
   nazwa_utworu: string;
   data_wydania: string;
+  likes_count: number;
   Autor: {
     imie: string;
     nazwisko: string;
@@ -51,7 +52,7 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
   const [volume, setVolumeState] = useState(1);
   const [isLooping, setIsLooping] = useState(false);
   const [playlist, setPlaylist] = useState<Song[]>([]);
-  const [allSongs, setAllSongs] = useState<Song[]>([]); // Store all available songs
+  const [allSongs, setAllSongs] = useState<Song[]>([]);
   const [favoriteSongs, setFavoriteSongs] = useState<number[]>([]);
   const [favoriteDetails, setFavoriteDetails] = useState<Song[]>([]);
   const [currentPlaybackSource, setCurrentPlaybackSource] = useState<PlaybackSource>('single');
