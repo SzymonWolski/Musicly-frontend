@@ -37,7 +37,10 @@ const AdminPanel = () => {
   const navigate = useNavigate();
   const [isAddingMode, setIsAddingMode] = useState(false);
   const [isDeletingMode, setIsDeletingMode] = useState(false);
-  const [isUserManagementMode, setIsUserManagementMode] = useState(false); // New mode for user management
+  const [isUserManagementMode, setIsUserManagementMode] = useState(false);
+  // New state for song management mode
+  const [isManagingMode, setIsManagingMode] = useState(false);
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<BackendErrors>({});
   const [songFile, setSongFile] = useState<File | null>(null);
@@ -63,6 +66,20 @@ const AdminPanel = () => {
   const [userSearchQuery, setUserSearchQuery] = useState(""); // New state for user search
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [userError, setUserError] = useState("");
+
+  // New states for song management
+  const [managementSearchQuery, setManagementSearchQuery] = useState("");
+  const [managementSearchResults, setManagementSearchResults] = useState<Song[]>([]);
+  const [isManagementSearching, setIsManagementSearching] = useState(false);
+  const [isLoadingManagementSongs, setIsLoadingManagementSongs] = useState(false);
+  const [managementError, setManagementError] = useState("");
+  const [editingSong, setEditingSong] = useState<Song | null>(null);
+  const [editFormData, setEditFormData] = useState<SongFormData>({
+    nazwa_utworu: "",
+    data_wydania: "",
+    kryptonim_artystyczny: ""
+  });
+  const [isUpdating, setIsUpdating] = useState(false);
 
   // Redirect if not admin
   React.useEffect(() => {
@@ -461,12 +478,241 @@ const AdminPanel = () => {
     }
   };
 
+  // Fetch all songs when entering management mode
+  useEffect(() => {
+    if (isManagingMode) {
+      fetchSongsForManagement();
+    }
+  }, [isManagingMode]);
+
+  // Function to fetch all songs for management
+  const fetchSongsForManagement = async () => {
+    setIsLoadingManagementSongs(true);
+    setManagementError("");
+    
+    try {
+      const response = await axios.get(`http://localhost:5000/files/list`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem("token")}`
+        }
+      });
+
+      if (response.data && response.data.utwory) {
+        setManagementSearchResults(response.data.utwory);
+      } else {
+        setManagementSearchResults([]);
+      }
+    } catch (error) {
+      console.error("Error fetching songs for management:", error);
+      setManagementError("Błąd podczas pobierania piosenek. Spróbuj ponownie później.");
+    } finally {
+      setIsLoadingManagementSongs(false);
+    }
+  };
+
+  const handleManagementSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setManagementSearchQuery(e.target.value);
+  };
+
+  const handleManagementSearch = async () => {
+    if (!managementSearchQuery.trim()) {
+      // If search query is empty, show all songs
+      fetchSongsForManagement();
+      return;
+    }
+
+    setIsManagementSearching(true);
+    setManagementError("");
+
+    try {
+      const response = await axios.get(`http://localhost:5000/files/list`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem("token")}`
+        }
+      });
+
+      if (response.data && response.data.utwory) {
+        // Filter songs locally based on search query
+        const filteredResults = response.data.utwory.filter((song: Song) => 
+          song.nazwa_utworu.toLowerCase().includes(managementSearchQuery.toLowerCase()) ||
+          song.Autor.kryptonim_artystyczny.toLowerCase().includes(managementSearchQuery.toLowerCase())
+        );
+        setManagementSearchResults(filteredResults);
+      } else {
+        setManagementSearchResults([]);
+      }
+    } catch (error) {
+      console.error("Error searching songs:", error);
+      setManagementError("Błąd podczas wyszukiwania piosenek. Spróbuj ponownie później.");
+    } finally {
+      setIsManagementSearching(false);
+    }
+  };
+
+  const handleEditClick = (song: Song) => {
+    setEditingSong(song);
+    setEditFormData({
+      nazwa_utworu: song.nazwa_utworu,
+      data_wydania: song.data_wydania,
+      kryptonim_artystyczny: song.Autor.kryptonim_artystyczny
+    });
+    setErrors({});
+  };
+
+  const handleEditCancel = () => {
+    setEditingSong(null);
+  };
+
+  const handleEditChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    
+    // For year field, only accept numbers and limit to 4 characters
+    if (name === 'data_wydania') {
+      // Only allow digits (0-9)
+      const onlyNums = value.replace(/[^0-9]/g, '');
+      // Limit to 4 characters
+      const truncated = onlyNums.slice(0, 4);
+      setEditFormData(prev => ({
+        ...prev,
+        [name]: truncated
+      }));
+    } else {
+      setEditFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
+    
+    if (errors[name]) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSong) return;
+    
+    setIsUpdating(true);
+    setErrors({});
+
+    // Validate inputs
+    if (editFormData.nazwa_utworu.length > 50) {
+      setErrors(prev => ({
+        ...prev,
+        nazwa_utworu: "Tytuł piosenki nie może przekraczać 50 znaków"
+      }));
+      setIsUpdating(false);
+      return;
+    }
+
+    if (editFormData.kryptonim_artystyczny.length > 50) {
+      setErrors(prev => ({
+        ...prev,
+        kryptonim_artystyczny: "Nazwa artysty nie może przekraczać 50 znaków"
+      }));
+      setIsUpdating(false);
+      return;
+    }
+
+    // Validate year format
+    if (!/^\d{1,4}$/.test(editFormData.data_wydania)) {
+      setErrors(prev => ({
+        ...prev,
+        data_wydania: "Rok wydania musi być liczbą do 4 cyfr"
+      }));
+      setIsUpdating(false);
+      return;
+    }
+
+    // Check if song with new title and artist already exists (unless it's the same song)
+    try {
+      const response = await axios.get(`http://localhost:5000/files/list`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem("token")}`
+        }
+      });
+      
+      if (response.data && response.data.utwory) {
+        const isDuplicate = response.data.utwory.some((song: Song) => 
+          song.ID_utworu !== editingSong.ID_utworu &&
+          song.nazwa_utworu.toLowerCase() === editFormData.nazwa_utworu.toLowerCase() && 
+          song.Autor.kryptonim_artystyczny.toLowerCase() === editFormData.kryptonim_artystyczny.toLowerCase()
+        );
+        
+        if (isDuplicate) {
+          setErrors(prev => ({
+            ...prev,
+            general: `Piosenka "${editFormData.nazwa_utworu}" wykonawcy "${editFormData.kryptonim_artystyczny}" już istnieje w bazie!`
+          }));
+          setIsUpdating(false);
+          return;
+        }
+      }
+    } catch (error) {
+      console.error("Error in duplicate check:", error);
+      // Continue with update if check fails
+    }
+
+    try {
+      const response = await axios.put(
+        `http://localhost:5000/files/update/${editingSong.ID_utworu}`,
+        {
+          nazwa_utworu: editFormData.nazwa_utworu,
+          data_wydania: editFormData.data_wydania,
+          kryptonim_artystyczny: editFormData.kryptonim_artystyczny
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem("token")}`
+          }
+        }
+      );
+
+      if (response.data && response.data.success) {
+        // Update the song in the local state
+        setManagementSearchResults(prevResults => 
+          prevResults.map(song => 
+            song.ID_utworu === editingSong.ID_utworu 
+            ? {
+                ...song,
+                nazwa_utworu: editFormData.nazwa_utworu,
+                data_wydania: editFormData.data_wydania,
+                Autor: {
+                  ...song.Autor,
+                  kryptonim_artystyczny: editFormData.kryptonim_artystyczny
+                }
+              }
+            : song
+          )
+        );
+        
+        setEditingSong(null);
+        alert("Piosenka została pomyślnie zaktualizowana.");
+      }
+    } catch (error: any) {
+      if (error.response?.data?.errors) {
+        setErrors(error.response.data.errors);
+      } else {
+        setErrors({ 
+          general: error.response?.data?.message || 
+                  "Wystąpił błąd podczas aktualizacji piosenki. Spróbuj ponownie później." 
+        });
+      }
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-800 text-white p-4">
       <div className="max-w-2xl mx-auto bg-gray-700 rounded-lg p-6 shadow-lg">
         <h1 className="text-3xl font-bold mb-6 text-center">Panel Administracyjny</h1>
         
-        {!isAddingMode && !isDeletingMode && !isUserManagementMode && (
+        {!isAddingMode && !isDeletingMode && !isUserManagementMode && !isManagingMode && (
           <div className="flex flex-col space-y-4">
             <div className="text-center text-yellow-500 font-bold mb-4">
               Zalogowano jako administrator: {user?.nick}
@@ -487,10 +733,17 @@ const AdminPanel = () => {
                 <span className="text-xl">Usuń piosenkę</span>
               </button>
 
-              {/* New button for user management */}
+              {/* New button for song management */}
+              <button
+                onClick={() => setIsManagingMode(true)}
+                className="px-6 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center justify-center"
+              >
+                <span className="text-xl">Zarządzaj piosenkami</span>
+              </button>
+
               <button
                 onClick={() => setIsUserManagementMode(true)}
-                className="px-6 py-4 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center justify-center col-span-full"
+                className="px-6 py-4 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center justify-center"
               >
                 <span className="text-xl">Zarządzanie użytkownikami</span>
               </button>
@@ -813,6 +1066,180 @@ const AdminPanel = () => {
               <div className="mt-6 flex justify-center">
                 <button
                   onClick={() => setIsUserManagementMode(false)}
+                  className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition"
+                >
+                  Powrót
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* New section for song management */}
+        {isManagingMode && (
+          <div>
+            <h2 className="text-2xl font-bold mb-4 text-center">Zarządzaj piosenkami</h2>
+            
+            {managementError && (
+              <div className="mb-4 p-2 bg-red-500 text-white rounded text-center">
+                {managementError}
+              </div>
+            )}
+
+            {/* Edit Form */}
+            {editingSong && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-gray-700 p-6 rounded-lg shadow-lg max-w-md w-full">
+                  <h3 className="text-xl font-bold mb-4">Edytuj dane piosenki</h3>
+                  
+                  {errors.general && (
+                    <div className="mb-4 p-2 bg-red-500 text-white rounded text-center">
+                      {errors.general}
+                    </div>
+                  )}
+                  
+                  <form onSubmit={handleEditSubmit} className="flex flex-col gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Tytuł piosenki</label>
+                      <input
+                        type="text"
+                        name="nazwa_utworu"
+                        placeholder="Tytuł piosenki (max 50 znaków)"
+                        value={editFormData.nazwa_utworu}
+                        onChange={handleEditChange}
+                        className={`w-full p-2 rounded bg-gray-600 text-white focus:outline-none focus:ring-2 ${
+                          errors.nazwa_utworu ? "focus:ring-red-500 border-red-500" : "focus:ring-blue-500"
+                        }`}
+                        required
+                      />
+                      {errors.nazwa_utworu ? (
+                        <p className="text-red-500 text-sm mt-1">{errors.nazwa_utworu}</p>
+                      ) : (
+                        <p className="text-gray-400 text-xs mt-1">{editFormData.nazwa_utworu.length}/50 znaków</p>
+                      )}
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Artysta</label>
+                      <input
+                        type="text"
+                        name="kryptonim_artystyczny"
+                        placeholder="Artysta (max 50 znaków)"
+                        value={editFormData.kryptonim_artystyczny}
+                        onChange={handleEditChange}
+                        className={`w-full p-2 rounded bg-gray-600 text-white focus:outline-none focus:ring-2 ${
+                          errors.kryptonim_artystyczny ? "focus:ring-red-500 border-red-500" : "focus:ring-blue-500"
+                        }`}
+                        required
+                      />
+                      {errors.kryptonim_artystyczny ? (
+                        <p className="text-red-500 text-sm mt-1">{errors.kryptonim_artystyczny}</p>
+                      ) : (
+                        <p className="text-gray-400 text-xs mt-1">{editFormData.kryptonim_artystyczny.length}/50 znaków</p>
+                      )}
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Rok wydania</label>
+                      <input
+                        type="text"
+                        name="data_wydania"
+                        placeholder="Rok wydania"
+                        value={editFormData.data_wydania}
+                        onChange={handleEditChange}
+                        className={`w-full p-2 rounded bg-gray-600 text-white focus:outline-none focus:ring-2 ${
+                          errors.data_wydania ? "focus:ring-red-500 border-red-500" : "focus:ring-blue-500"
+                        }`}
+                        required
+                      />
+                      {errors.data_wydania && (
+                        <p className="text-red-500 text-sm mt-1">{errors.data_wydania}</p>
+                      )}
+                    </div>
+                    
+                    <div className="flex justify-between mt-4">
+                      <button
+                        type="button"
+                        onClick={handleEditCancel}
+                        className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition"
+                      >
+                        Anuluj
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isUpdating}
+                        className={`px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition ${
+                          isUpdating ? "opacity-70 cursor-not-allowed" : ""
+                        }`}
+                      >
+                        {isUpdating ? (
+                          <span className="flex items-center justify-center">
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Aktualizowanie...
+                          </span>
+                        ) : "Zapisz zmiany"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+            
+            <div className="bg-gray-600 rounded-lg p-4">
+              <div className="flex mb-4">
+                <input
+                  type="text"
+                  placeholder="Wyszukaj piosenkę po tytule lub artyście"
+                  value={managementSearchQuery}
+                  onChange={handleManagementSearchChange}
+                  className="flex-grow p-2 rounded-l bg-gray-700 text-white border-r-0 border-gray-600 focus:outline-none"
+                />
+                <button 
+                  onClick={handleManagementSearch}
+                  disabled={isManagementSearching}
+                  className={`px-4 py-2 bg-blue-600 text-white rounded-r hover:bg-blue-700 transition ${
+                    isManagementSearching ? "opacity-70 cursor-not-allowed" : ""
+                  }`}
+                >
+                  {isManagementSearching ? "Szukam..." : "Szukaj"}
+                </button>
+              </div>
+              
+              <div className="max-h-80 overflow-y-auto mt-4">
+                {isLoadingManagementSongs ? (
+                  <div className="flex justify-center items-center py-8">
+                    <div className="animate-spin h-8 w-8 border-2 border-blue-500 rounded-full border-t-transparent"></div>
+                  </div>
+                ) : managementSearchResults.length === 0 ? (
+                  <p className="text-center text-gray-400 p-4">
+                    {managementSearchQuery ? "Nie znaleziono pasujących piosenek" : "Brak dostępnych piosenek"}
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-gray-700">
+                    {managementSearchResults.map((song) => (
+                      <li key={song.ID_utworu} className="py-3 flex justify-between items-center">
+                        <div>
+                          <p className="font-medium">{song.nazwa_utworu}</p>
+                          <p className="text-sm text-gray-400">{song.Autor.kryptonim_artystyczny} • {song.data_wydania}</p>
+                        </div>
+                        <button
+                          onClick={() => handleEditClick(song)}
+                          className="ml-4 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition text-sm"
+                        >
+                          Edytuj
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              
+              <div className="mt-6 flex justify-center">
+                <button
+                  onClick={() => setIsManagingMode(false)}
                   className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition"
                 >
                   Powrót
