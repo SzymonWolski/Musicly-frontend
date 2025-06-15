@@ -231,6 +231,30 @@ const AdminPanel = () => {
     setSongToDelete(null);
   };
 
+  // Add this new function to check if a song already exists
+  const checkIfSongExists = async (title: string, artist: string): Promise<boolean> => {
+    try {
+      const response = await axios.get(`http://localhost:5000/files/list`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem("token")}`
+        }
+      });
+
+      if (response.data && response.data.utwory) {
+        // Check if any song matches both title and artist (case insensitive)
+        return response.data.utwory.some((song: Song) => 
+          song.nazwa_utworu.toLowerCase() === title.toLowerCase() && 
+          song.Autor.kryptonim_artystyczny.toLowerCase() === artist.toLowerCase()
+        );
+      }
+      return false;
+    } catch (error) {
+      console.error("Error checking if song exists:", error);
+      // If there's an error checking, we'll proceed (fail open) but log the error
+      return false;
+    }
+  };
+
   const handleAddSong = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -268,6 +292,22 @@ const AdminPanel = () => {
       setErrors({ song: "Proszę wybrać plik z piosenką" });
       setIsSubmitting(false);
       return;
+    }
+
+    // Check if song already exists
+    try {
+      const songExists = await checkIfSongExists(songData.nazwa_utworu, songData.kryptonim_artystyczny);
+      if (songExists) {
+        setErrors(prev => ({
+          ...prev,
+          general: `Piosenka "${songData.nazwa_utworu}" wykonawcy "${songData.kryptonim_artystyczny}" już istnieje w bazie!`
+        }));
+        setIsSubmitting(false);
+        return;
+      }
+    } catch (error) {
+      console.error("Error in duplicate check:", error);
+      // Continue with submission if check fails
     }
 
     // Create form data to send files

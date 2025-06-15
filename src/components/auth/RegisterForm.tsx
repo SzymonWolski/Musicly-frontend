@@ -102,11 +102,21 @@ const RegisterForm = () => {
               placeholder="Nazwa użytkownika"
               value={formData.nick}
               onChange={handleChange}
+              maxLength={50}
               className={`w-full p-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 ${
                 errors.nick ? "focus:ring-red-500 border-red-500" : "focus:ring-blue-500"
               }`}
               required
             />
+            {formData.nick.length > 0 && (
+              <div className="flex justify-end mt-1">
+                <span className={`text-xs ${
+                  formData.nick.length > 40 ? 'text-yellow-400' : 'text-gray-400'
+                }`}>
+                  {formData.nick.length}/50
+                </span>
+              </div>
+            )}
             {errors.nick && (
               <p className="text-red-500 text-sm mt-1">{errors.nick}</p>
             )}
@@ -119,11 +129,21 @@ const RegisterForm = () => {
               placeholder="Adres e-mail"
               value={formData.email}
               onChange={handleChange}
+              maxLength={100}
               className={`w-full p-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 ${
                 errors.email ? "focus:ring-red-500 border-red-500" : "focus:ring-blue-500"
               }`}
               required
             />
+            {formData.email.length > 0 && (
+              <div className="flex justify-end mt-1">
+                <span className={`text-xs ${
+                  formData.email.length > 80 ? 'text-yellow-400' : 'text-gray-400'
+                }`}>
+                  {formData.email.length}/100
+                </span>
+              </div>
+            )}
             {errors.email && (
               <p className="text-red-500 text-sm mt-1">{errors.email}</p>
             )}
@@ -136,12 +156,22 @@ const RegisterForm = () => {
               placeholder="Hasło (min. 6 znaków)"
               value={formData.password}
               onChange={handleChange}
+              minLength={6}
+              maxLength={100}
               className={`w-full p-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 ${
                 errors.password ? "focus:ring-red-500 border-red-500" : "focus:ring-blue-500"
               }`}
               required
-              minLength={6}
             />
+            {formData.password.length > 0 && (
+              <div className="flex justify-end mt-1">
+                <span className={`text-xs ${
+                  formData.password.length > 80 ? 'text-yellow-400' : 'text-gray-400'
+                }`}>
+                  {formData.password.length}/100
+                </span>
+              </div>
+            )}
             {errors.password && (
               <p className="text-red-500 text-sm mt-1">{errors.password}</p>
             )}
