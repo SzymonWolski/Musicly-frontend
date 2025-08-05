@@ -17,6 +17,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   nick: string | null;
   isadmin: boolean;
+  profileImageUrl: string;
+  updateProfileImage: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -24,6 +26,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [profileImageUrl, setProfileImageUrl] = useState('');
   const navigate = useNavigate();
 
   // Inicjalizacja stanu z localStorage przy pierwszym renderze
@@ -36,6 +39,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(JSON.parse(storedUser));
     }
   }, []);
+
+  // Update profile image URL when user changes
+  useEffect(() => {
+    if (user?.id) {
+      const timestamp = new Date().getTime();
+      const imageUrl = `http://localhost:5000/profile/profile-image/${user.id}?t=${timestamp}`;
+      setProfileImageUrl(imageUrl);
+    }
+  }, [user?.id]);
 
   const login = (newToken: string, userData: User) => {
     setToken(newToken);
@@ -53,6 +65,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     navigate("/login");
   };
 
+  const updateProfileImage = () => {
+    if (user?.id) {
+      const timestamp = new Date().getTime();
+      const imageUrl = `http://localhost:5000/profile/profile-image/${user.id}?t=${timestamp}`;
+      setProfileImageUrl(imageUrl);
+    }
+  };
+
   const value = {
     user,
     token,
@@ -60,7 +80,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     login,
     logout,
     nick: user?.nick || null,
-    isadmin: user?.isadmin || false
+    isadmin: user?.isadmin || false,
+    profileImageUrl,
+    updateProfileImage,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

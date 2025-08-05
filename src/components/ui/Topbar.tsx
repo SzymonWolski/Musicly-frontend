@@ -10,14 +10,14 @@ import { useState, useEffect } from 'react';
 const TopBar = () => {
   const navigate = useNavigate();
   const { user, logout, isAuthenticated } = useAuth();
-  const [profileImageUrl, setProfileImageUrl] = useState<string>('');
   const [imageLoading, setImageLoading] = useState(true);
+  const [imageKey, setImageKey] = useState(0); // Key to force image refresh
 
+  // Force image refresh when updateProfileImage is called
   useEffect(() => {
     if (user?.id) {
-      const imageUrl = `http://localhost:5000/profile/profile-image/${user.id}`;
-      setProfileImageUrl(imageUrl);
       setImageLoading(true);
+      setImageKey(prev => prev + 1); // Force re-render of img element
     }
   }, [user?.id]);
 
@@ -112,7 +112,8 @@ const TopBar = () => {
                 )}
                 {user?.id && (
                   <img
-                    src={profileImageUrl}
+                    key={imageKey} // Force re-render when key changes
+                    src={`http://localhost:5000/profile/profile-image/${user.id}?t=${Date.now()}`}
                     alt="Profile"
                     className={`w-full h-full object-cover ${imageLoading ? 'hidden' : 'block'}`}
                     onLoad={handleImageLoad}
