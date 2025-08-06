@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import axios from "axios";
+import ProfilePicture from "../components/ProfilePicture";
 
 interface User {
   ID_uzytkownik: number;
@@ -315,10 +316,17 @@ const FriendsPage = () => {
                     : friendship.ID_uzytkownik1;
                     
                   return (
-                    <li key={friendship.ID_znajomych} className="py-3 flex justify-between items-center">
-                      <div>
-                        <p className="font-medium">{friend.nick}</p>
-                        <p className="text-sm text-gray-400">{friend.email}</p>
+                    <li key={friendship.ID_znajomych} className="py-3 flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <ProfilePicture 
+                          userId={friendId} 
+                          userName={friend.nick} 
+                          size="md"
+                        />
+                        <div>
+                          <p className="font-medium">{friend.nick}</p>
+                          <p className="text-sm text-gray-400">{friend.email}</p>
+                        </div>
                       </div>
                       <div className="flex space-x-2">
                         <button
@@ -351,10 +359,17 @@ const FriendsPage = () => {
                 <ul className="divide-y divide-gray-600">
                   {receivedRequests.map(request => (
                     <li key={request.ID_znajomych} className="py-3">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <p className="font-medium">{request.Uzytkownik1.nick}</p>
-                          <p className="text-sm text-gray-400">{request.Uzytkownik1.email}</p>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <ProfilePicture 
+                            userId={request.ID_uzytkownik1} 
+                            userName={request.Uzytkownik1.nick} 
+                            size="md"
+                          />
+                          <div>
+                            <p className="font-medium">{request.Uzytkownik1.nick}</p>
+                            <p className="text-sm text-gray-400">{request.Uzytkownik1.email}</p>
+                          </div>
                         </div>
                         <div className="flex space-x-2">
                           <button
@@ -382,10 +397,17 @@ const FriendsPage = () => {
                 <h2 className="text-xl font-semibold mb-4">Wysłane zaproszenia</h2>
                 <ul className="divide-y divide-gray-600">
                   {pendingRequests.map(request => (
-                    <li key={request.ID_znajomych} className="py-3 flex justify-between items-center">
-                      <div>
-                        <p className="font-medium">{request.Uzytkownik2.nick}</p>
-                        <p className="text-sm text-gray-400">{request.Uzytkownik2.email}</p>
+                    <li key={request.ID_znajomych} className="py-3 flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <ProfilePicture 
+                          userId={request.ID_uzytkownik2} 
+                          userName={request.Uzytkownik2.nick} 
+                          size="md"
+                        />
+                        <div>
+                          <p className="font-medium">{request.Uzytkownik2.nick}</p>
+                          <p className="text-sm text-gray-400">{request.Uzytkownik2.email}</p>
+                        </div>
                       </div>
                       <span className="text-gray-400 text-sm">Oczekujące</span>
                     </li>
@@ -453,10 +475,17 @@ const FriendsPage = () => {
                       const relationshipStatus = getRelationshipStatus(foundUser.ID_uzytkownik);
                       
                       return (
-                        <li key={foundUser.ID_uzytkownik} className="py-3 flex justify-between items-center">
-                          <div>
-                            <p className="font-medium">{foundUser.nick}</p>
-                            <p className="text-sm text-gray-400">{foundUser.email}</p>
+                        <li key={foundUser.ID_uzytkownik} className="py-3 flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <ProfilePicture 
+                              userId={foundUser.ID_uzytkownik} 
+                              userName={foundUser.nick} 
+                              size="md"
+                            />
+                            <div>
+                              <p className="font-medium">{foundUser.nick}</p>
+                              <p className="text-sm text-gray-400">{foundUser.email}</p>
+                            </div>
                           </div>
                           {relationshipStatus === "none" && (
                             <button
