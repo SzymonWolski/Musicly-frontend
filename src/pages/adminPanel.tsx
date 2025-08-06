@@ -81,6 +81,7 @@ const AdminPanel = () => {
     kryptonim_artystyczny: ""
   });
   const [isUpdating, setIsUpdating] = useState(false);
+  const [editImageFile, setEditImageFile] = useState<File | null>(null);
 
   // Redirect if not admin
   React.useEffect(() => {
@@ -601,11 +602,13 @@ const AdminPanel = () => {
       data_wydania: song.data_wydania,
       kryptonim_artystyczny: song.Autor.kryptonim_artystyczny
     });
+    setEditImageFile(null);
     setErrors({});
   };
 
   const handleEditCancel = () => {
     setEditingSong(null);
+    setEditImageFile(null);
   };
 
   const handleEditChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -634,6 +637,20 @@ const AdminPanel = () => {
         delete newErrors[name];
         return newErrors;
       });
+    }
+  };
+
+  const handleEditImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setEditImageFile(e.target.files[0]);
+      
+      if (errors.image) {
+        setErrors(prev => {
+          const newErrors = { ...prev };
+          delete newErrors.image;
+          return newErrors;
+        });
+      }
     }
   };
 
@@ -718,6 +735,36 @@ const AdminPanel = () => {
       );
 
       if (response.data && response.data.success) {
+        // If new image file is selected, upload it
+        if (editImageFile) {
+          try {
+            const imageFormData = new FormData();
+            imageFormData.append('image', editImageFile);
+            
+            const imageResponse = await axios.post(
+              `http://localhost:5000/files/upload-image/${editingSong.ID_utworu}`,
+              imageFormData,
+              {
+                headers: {
+                  'Content-Type': 'multipart/form-data',
+                  'Authorization': `Bearer ${localStorage.getItem("token")}`
+                }
+              }
+            );
+            
+            if (imageResponse.data.success) {
+              alert("Piosenka i obraz zostały pomyślnie zaktualizowane.");
+            } else {
+              alert("Piosenka została zaktualizowana, ale wystąpił problem z przesłaniem nowego obrazu.");
+            }
+          } catch (imageError) {
+            console.error('Error uploading image:', imageError);
+            alert("Piosenka została zaktualizowana, ale wystąpił błąd podczas przesyłania nowego obrazu.");
+          }
+        } else {
+          alert("Piosenka została pomyślnie zaktualizowana.");
+        }
+        
         // Update the song in the local state
         setManagementSearchResults(prevResults => 
           prevResults.map(song => 
@@ -736,7 +783,7 @@ const AdminPanel = () => {
         );
         
         setEditingSong(null);
-        alert("Piosenka została pomyślnie zaktualizowana.");
+        setEditImageFile(null);
       }
     } catch (error: any) {
       if (error.response?.data?.errors) {
@@ -984,9 +1031,33 @@ const AdminPanel = () => {
                   <ul className="divide-y divide-gray-700">
                     {searchResults.map((song) => (
                       <li key={song.ID_utworu} className="py-3 flex justify-between items-center">
-                        <div>
-                          <p className="font-medium">{song.nazwa_utworu}</p>
-                          <p className="text-sm text-gray-400">{song.Autor.kryptonim_artystyczny} • {song.data_wydania}</p>
+                        <div className="flex items-center space-x-3">
+                          {/* Song Image */}
+                          <div className="w-12 h-12 flex-shrink-0 rounded-md overflow-hidden bg-gray-700">
+                            <img
+                              src={`http://localhost:5000/files/image/${song.ID_utworu}`}
+                              alt={`Okładka ${song.nazwa_utworu}`}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                // Replace with music note icon on error
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                target.parentElement!.innerHTML = `
+                                  <div class="w-full h-full flex items-center justify-center bg-gray-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                                    </svg>
+                                  </div>
+                                `;
+                              }}
+                            />
+                          </div>
+                          
+                          {/* Song Info */}
+                          <div>
+                            <p className="font-medium">{song.nazwa_utworu}</p>
+                            <p className="text-sm text-gray-400">{song.Autor.kryptonim_artystyczny} • {song.data_wydania}</p>
+                          </div>
                         </div>
                         <button
                           onClick={() => handleDeleteClick(song)}
@@ -1225,6 +1296,29 @@ const AdminPanel = () => {
                       )}
                     </div>
                     
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Zmień obraz utworu (JPG, PNG)</label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleEditImageChange}
+                        className={`w-full p-2 rounded bg-gray-600 text-white file:mr-4 file:py-2 file:px-4
+                        file:rounded file:border-0 file:text-sm file:font-semibold
+                        file:bg-gray-700 file:text-white hover:file:bg-gray-600 ${
+                          errors.image ? "focus:ring-red-500 border-red-500" : "focus:ring-blue-500"
+                        }`}
+                      />
+                      {errors.image && (
+                        <p className="text-red-500 text-sm mt-1">{errors.image}</p>
+                      )}
+                      {editImageFile && (
+                        <p className="text-green-500 text-sm mt-1">Wybrano nowy obraz: {editImageFile.name}</p>
+                      )}
+                      <p className="text-gray-400 text-xs mt-1">
+                        Pozostaw puste, aby zachować obecny obraz. Maksymalny rozmiar: 10MB.
+                      </p>
+                    </div>
+                    
                     <div className="flex justify-between mt-4">
                       <button
                         type="button"
@@ -1289,9 +1383,33 @@ const AdminPanel = () => {
                   <ul className="divide-y divide-gray-700">
                     {managementSearchResults.map((song) => (
                       <li key={song.ID_utworu} className="py-3 flex justify-between items-center">
-                        <div>
-                          <p className="font-medium">{song.nazwa_utworu}</p>
-                          <p className="text-sm text-gray-400">{song.Autor.kryptonim_artystyczny} • {song.data_wydania}</p>
+                        <div className="flex items-center space-x-3">
+                          {/* Song Image */}
+                          <div className="w-12 h-12 flex-shrink-0 rounded-md overflow-hidden bg-gray-700">
+                            <img
+                              src={`http://localhost:5000/files/image/${song.ID_utworu}`}
+                              alt={`Okładka ${song.nazwa_utworu}`}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                // Replace with music note icon on error
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                target.parentElement!.innerHTML = `
+                                  <div class="w-full h-full flex items-center justify-center bg-gray-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                                    </svg>
+                                  </div>
+                                `;
+                              }}
+                            />
+                          </div>
+                          
+                          {/* Song Info */}
+                          <div>
+                            <p className="font-medium">{song.nazwa_utworu}</p>
+                            <p className="text-sm text-gray-400">{song.Autor.kryptonim_artystyczny} • {song.data_wydania}</p>
+                          </div>
                         </div>
                         <button
                           onClick={() => handleEditClick(song)}

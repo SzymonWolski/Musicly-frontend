@@ -531,9 +531,33 @@ const HomePage = () => {
             <div className="bg-gray-800 bg-opacity-60 p-4 rounded-lg mb-4 shadow-lg backdrop-blur-sm">
               <div className="flex flex-col">
                 <div className="flex items-center justify-between mb-4">
-                  <div className="w-full">
-                    <h2 className="text-xl font-bold text-white">{currentSong.nazwa_utworu}</h2>
-                    <p className="text-gray-400">{currentSong.Autor.kryptonim_artystyczny} • {currentSong.data_wydania}</p>
+                  <div className="flex items-center space-x-4 w-full">
+                    {/* Song Image in Player */}
+                    <div className="w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-700">
+                      <img
+                        src={`http://localhost:5000/files/image/${currentSong.ID_utworu}`}
+                        alt={`Okładka ${currentSong.nazwa_utworu}`}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          // Replace with music note icon on error
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          target.parentElement!.innerHTML = `
+                            <div class="w-full h-full flex items-center justify-center bg-gray-600">
+                              <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                              </svg>
+                            </div>
+                          `;
+                        }}
+                      />
+                    </div>
+                    
+                    {/* Song Info */}
+                    <div className="flex-1">
+                      <h2 className="text-xl font-bold text-white">{currentSong.nazwa_utworu}</h2>
+                      <p className="text-gray-400">{currentSong.Autor.kryptonim_artystyczny} • {currentSong.data_wydania}</p>
+                    </div>
                   </div>
                   {audioLoading && (
                     <div className="p-2 bg-gray-600 bg-opacity-70 rounded-full">
