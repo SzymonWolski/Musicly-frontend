@@ -728,10 +728,35 @@ const HomePage = () => {
                       onClick={() => handlePlayThisSong(song)}
                     >
                       <div className="flex justify-between items-center">
-                        <div>
-                          <p className="font-medium text-white">{song.nazwa_utworu}</p>
-                          <p className="text-sm text-gray-400">{song.Autor.kryptonim_artystyczny} • {song.data_wydania}</p>
+                        <div className="flex items-center space-x-3">
+                          {/* Song Image */}
+                          <div className="w-12 h-12 flex-shrink-0 rounded-md overflow-hidden bg-gray-700">
+                            <img
+                              src={`http://localhost:5000/files/image/${song.ID_utworu}`}
+                              alt={`Okładka ${song.nazwa_utworu}`}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                // Replace with music note icon on error
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                target.parentElement!.innerHTML = `
+                                  <div class="w-full h-full flex items-center justify-center bg-gray-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                                    </svg>
+                                  </div>
+                                `;
+                              }}
+                            />
+                          </div>
+                          
+                          {/* Song Info */}
+                          <div>
+                            <p className="font-medium text-white">{song.nazwa_utworu}</p>
+                            <p className="text-sm text-gray-400">{song.Autor.kryptonim_artystyczny} • {song.data_wydania}</p>
+                          </div>
                         </div>
+                        
                         <div className="flex items-center space-x-3">
                           {/* Add to playlist button with dropdown */}
                           <div className="relative" ref={dropdownRef}>
@@ -937,10 +962,35 @@ const HomePage = () => {
                           onClick={() => handlePlayThisSong(song)}
                         >
                           <div className="flex justify-between items-center">
-                            <div>
-                              <p className="font-medium text-white">{song.nazwa_utworu}</p>
-                              <p className="text-sm text-gray-400">{song.Autor.kryptonim_artystyczny} • {song.data_wydania}</p>
+                            <div className="flex items-center space-x-3">
+                              {/* Song Image */}
+                              <div className="w-12 h-12 flex-shrink-0 rounded-md overflow-hidden bg-gray-700">
+                                <img
+                                  src={`http://localhost:5000/files/image/${song.ID_utworu}`}
+                                  alt={`Okładka ${song.nazwa_utworu}`}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    // Replace with music note icon on error
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = 'none';
+                                    target.parentElement!.innerHTML = `
+                                      <div class="w-full h-full flex items-center justify-center bg-gray-600">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                                        </svg>
+                                      </div>
+                                    `;
+                                  }}
+                                />
+                              </div>
+                              
+                              {/* Song Info */}
+                              <div>
+                                <p className="font-medium text-white">{song.nazwa_utworu}</p>
+                                <p className="text-sm text-gray-400">{song.Autor.kryptonim_artystyczny} • {song.data_wydania}</p>
+                              </div>
                             </div>
+                            
                             <div className="flex items-center space-x-3">
                               {/* Remove from playlist button - Updated to use the new function */}
                               <button 

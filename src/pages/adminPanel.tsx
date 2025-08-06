@@ -44,6 +44,7 @@ const AdminPanel = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<BackendErrors>({});
   const [songFile, setSongFile] = useState<File | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
   
   // Search and delete states
   const [searchQuery, setSearchQuery] = useState("");
@@ -125,6 +126,20 @@ const AdminPanel = () => {
         setErrors(prev => {
           const newErrors = { ...prev };
           delete newErrors.song;
+          return newErrors;
+        });
+      }
+    }
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setImageFile(e.target.files[0]);
+      
+      if (errors.image) {
+        setErrors(prev => {
+          const newErrors = { ...prev };
+          delete newErrors.image;
           return newErrors;
         });
       }
@@ -343,13 +358,43 @@ const AdminPanel = () => {
       });
       
       if (response.data.success) {
-        alert(`Piosenka "${songData.nazwa_utworu}" została dodana pomyślnie!`);
+        // If image file is selected, upload it separately
+        if (imageFile) {
+          try {
+            const imageFormData = new FormData();
+            imageFormData.append('image', imageFile);
+            
+            const imageResponse = await axios.post(
+              `http://localhost:5000/files/upload-image/${response.data.utwor.ID_utworu}`,
+              imageFormData,
+              {
+                headers: {
+                  'Content-Type': 'multipart/form-data',
+                  'Authorization': `Bearer ${localStorage.getItem("token")}`
+                }
+              }
+            );
+            
+            if (imageResponse.data.success) {
+              alert(`Piosenka "${songData.nazwa_utworu}" została dodana pomyślnie wraz z obrazem!`);
+            } else {
+              alert(`Piosenka "${songData.nazwa_utworu}" została dodana pomyślnie, ale wystąpił problem z przesłaniem obrazu.`);
+            }
+          } catch (imageError) {
+            console.error('Error uploading image:', imageError);
+            alert(`Piosenka "${songData.nazwa_utworu}" została dodana pomyślnie, ale wystąpił błąd podczas przesyłania obrazu.`);
+          }
+        } else {
+          alert(`Piosenka "${songData.nazwa_utworu}" została dodana pomyślnie!`);
+        }
+        
         setSongData({
           nazwa_utworu: "",
           data_wydania: "",
           kryptonim_artystyczny: ""
         });
         setSongFile(null);
+        setImageFile(null);
         setIsAddingMode(false);
       }
     } catch (error: any) {
@@ -840,6 +885,29 @@ const AdminPanel = () => {
                 {songFile && (
                   <p className="text-green-500 text-sm mt-1">Wybrano: {songFile.name}</p>
                 )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Obraz utworu (JPG, PNG) - opcjonalnie</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  className={`w-full p-2 rounded bg-gray-600 text-white file:mr-4 file:py-2 file:px-4
+                  file:rounded file:border-0 file:text-sm file:font-semibold
+                  file:bg-gray-700 file:text-white hover:file:bg-gray-600 ${
+                    errors.image ? "focus:ring-red-500 border-red-500" : "focus:ring-blue-500"
+                  }`}
+                />
+                {errors.image && (
+                  <p className="text-red-500 text-sm mt-1">{errors.image}</p>
+                )}
+                {imageFile && (
+                  <p className="text-green-500 text-sm mt-1">Wybrano obraz: {imageFile.name}</p>
+                )}
+                <p className="text-gray-400 text-xs mt-1">
+                  Maksymalny rozmiar: 10MB. Obraz zostanie automatycznie przeskalowany do max 1000x1000px.
+                </p>
               </div>
               
               <div className="flex justify-between mt-4">
