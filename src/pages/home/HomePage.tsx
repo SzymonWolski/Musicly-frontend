@@ -21,6 +21,7 @@ interface Playlist {
   id: number;
   name: string;
   songCount: number;
+  imageFilename?: string;
 }
 
 const HomePage = () => {
@@ -63,6 +64,9 @@ const HomePage = () => {
   const [loadingPlaylists, setLoadingPlaylists] = useState(false);
   const [filteredPlaylists, setFilteredPlaylists] = useState<Playlist[]>([]);
   
+  // Add state for playlist images
+  const [playlistImages, setPlaylistImages] = useState<{[key: number]: string}>({});
+
   // Selected playlist state
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
   const [playlistSongs, setPlaylistSongs] = useState<Song[]>([]);
@@ -110,6 +114,42 @@ const HomePage = () => {
     };
   }, []);
 
+  // Function to fetch playlist image
+  const fetchPlaylistImage = async (playlistId: number) => {
+    try {
+      const response = await fetch(`http://localhost:5000/playlists/${playlistId}/image`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const imageUrl = URL.createObjectURL(blob);
+        setPlaylistImages(prev => ({
+          ...prev,
+          [playlistId]: imageUrl
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching playlist image:', error);
+    }
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpenDropdownId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   const fetchUserPlaylists = async () => {
     setLoadingPlaylists(true);
     try {
@@ -122,6 +162,13 @@ const HomePage = () => {
       if (response.data && Array.isArray(response.data.playlists)) {
         setUserPlaylists(response.data.playlists);
         setFilteredPlaylists(response.data.playlists);
+        
+        // Fetch images for playlists that have them
+        response.data.playlists.forEach((playlist: Playlist) => {
+          if (playlist.imageFilename) {
+            fetchPlaylistImage(playlist.id);
+          }
+        });
       }
     } catch (error) {
       console.error('Error fetching playlists:', error);
@@ -129,6 +176,15 @@ const HomePage = () => {
       setLoadingPlaylists(false);
     }
   };
+
+  // Clean up playlist image URLs when component unmounts
+  useEffect(() => {
+    return () => {
+      Object.values(playlistImages).forEach(url => {
+        URL.revokeObjectURL(url);
+      });
+    };
+  }, [playlistImages]);
 
   // Format time helper function
   const formatTime = (time: number) => {
@@ -1119,8 +1175,28 @@ const HomePage = () => {
                         className="bg-zinc-800 bg-opacity-60 rounded-lg overflow-hidden hover:bg-opacity-80 transition cursor-pointer"
                         onClick={() => openPlaylistContent(playlist)}
                       >
-                        <div className="h-32 bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center">
-                          <ListMusic size={48} className="text-white" />
+                        <div className="h-32 bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center relative">
+                          {playlist.imageFilename && playlistImages[playlist.id] ? (
+                            <img
+                              src={playlistImages[playlist.id]}
+                              alt={`Okładka ${playlist.name}`}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                // Replace with default icon on error
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                                target.parentElement!.innerHTML = `
+                                  <div class="w-full h-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                                    </svg>
+                                  </div>
+                                `;
+                              }}
+                            />
+                          ) : (
+                            <ListMusic size={48} className="text-white" />
+                          )}
                         </div>
                         <div className="p-3">
                           <h4 className="font-medium text-white truncate">{playlist.name}</h4>
