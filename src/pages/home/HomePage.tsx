@@ -73,12 +73,6 @@ const HomePage = () => {
   const [loadingPlaylistSongs, setLoadingPlaylistSongs] = useState(false);
   const [playlistError, setPlaylistError] = useState('');
   
-  // Create playlist modal state
-  const [isCreatePlaylistModalOpen, setIsCreatePlaylistModalOpen] = useState(false);
-  const [newPlaylistName, setNewPlaylistName] = useState('');
-  const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
-  const [createPlaylistError, setCreatePlaylistError] = useState('');
-  
   // Dropdown state for "Add to playlist"
   const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -289,66 +283,6 @@ const HomePage = () => {
     }
   };
 
-  // Handle opening and closing the create playlist modal
-  const openCreatePlaylistModal = () => {
-    setIsCreatePlaylistModalOpen(true);
-    setNewPlaylistName('');
-    setCreatePlaylistError('');
-  };
-  
-  const closeCreatePlaylistModal = () => {
-    setIsCreatePlaylistModalOpen(false);
-  };
-  
-  // Handle creating a new playlist
-  const handleCreatePlaylist = async () => {
-    // Validate input
-    if (!newPlaylistName.trim()) {
-      setCreatePlaylistError('Nazwa playlisty nie może być pusta.');
-      return;
-    }
-    
-    // Add character limit validation - 70 characters
-    if (newPlaylistName.trim().length > 70) {
-      setCreatePlaylistError('Nazwa playlisty nie może przekraczać 70 znaków.');
-      return;
-    }
-    
-    setIsCreatingPlaylist(true);
-    setCreatePlaylistError('');
-    
-    try {
-      const response = await axios.post('http://localhost:5000/playlists', {
-        name: newPlaylistName.trim()
-      }, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      // Add the new playlist to state
-      if (response.data && response.data.playlist) {
-        const newPlaylist = {
-          id: response.data.playlist.id,
-          name: response.data.playlist.name,
-          songCount: 0
-        };
-        
-        setUserPlaylists([...userPlaylists, newPlaylist]);
-        setFilteredPlaylists([...userPlaylists, newPlaylist]);
-      }
-      
-      // Close modal
-      closeCreatePlaylistModal();
-      
-    } catch (error) {
-      console.error('Error creating playlist:', error);
-      setCreatePlaylistError('Nie udało się utworzyć playlisty. Spróbuj ponownie.');
-    } finally {
-      setIsCreatingPlaylist(false);
-    }
-  };
-
   // Switch between tabs
   const switchTab = (tab: 'songs' | 'playlists') => {
     setActiveTab(tab);
@@ -439,42 +373,6 @@ const HomePage = () => {
     }
   };
 
-  // Handle deleting an entire playlist
-  const handleDeletePlaylist = async () => {
-    if (!selectedPlaylist) return;
-    
-    // Confirm deletion with the user
-    const isConfirmed = window.confirm(`Czy na pewno chcesz usunąć playlistę "${selectedPlaylist.name}"? Ta operacja jest nieodwracalna.`);
-    
-    if (!isConfirmed) return;
-    
-    try {
-      await axios.delete(`http://localhost:5000/playlists/${selectedPlaylist.id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      // Remove the playlist from the lists
-      setUserPlaylists(prevPlaylists => 
-        prevPlaylists.filter(playlist => playlist.id !== selectedPlaylist.id)
-      );
-      setFilteredPlaylists(prevPlaylists => 
-        prevPlaylists.filter(playlist => playlist.id !== selectedPlaylist.id)
-      );
-      
-      // Close the playlist view
-      closePlaylistContent();
-      
-      // Show success notification
-      alert('Playlista została usunięta.');
-      
-    } catch (error) {
-      console.error('Error deleting playlist:', error);
-      alert('Nie udało się usunąć playlisty. Spróbuj ponownie.');
-    }
-  };
-
   // Handle playing all songs in a playlist
   const handlePlayAllSongs = () => {
     if (!selectedPlaylist || playlistSongs.length === 0) return;
@@ -499,80 +397,6 @@ const HomePage = () => {
         background: 'linear-gradient(355deg, #000000 20%,rgb(65, 38, 4) 50%,rgb(165, 85, 28) 80%)',
         backgroundAttachment: 'fixed'
       }}>
-      {/* Create Playlist Modal */}
-      <AnimatePresence>
-        {isCreatePlaylistModalOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4"
-            onClick={closeCreatePlaylistModal}
-          >
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-zinc-800 rounded-lg p-6 w-full max-w-md"
-              onClick={e => e.stopPropagation()}
-            >
-              <h2 className="text-xl font-bold text-white mb-4">Utwórz nową playlistę</h2>
-              
-              <div className="mb-4">
-                <label htmlFor="playlistName" className="block text-sm font-medium text-gray-300 mb-1">
-                  Nazwa playlisty
-                </label>
-                <input
-                  type="text"
-                  id="playlistName"
-                  value={newPlaylistName}
-                  onChange={(e) => setNewPlaylistName(e.target.value)}
-                  maxLength={70} // Add maxLength attribute
-                  placeholder="Wprowadź nazwę playlisty"
-                  className="w-full p-2 bg-zinc-700 text-white rounded border border-zinc-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                {newPlaylistName.length > 0 && (
-                  <div className="flex justify-end mt-1">
-                    <span className={`text-xs ${
-                      newPlaylistName.length > 60 ? 'text-yellow-400' : 'text-gray-400'
-                    }`}>
-                      {newPlaylistName.length}/70
-                    </span>
-                  </div>
-                )}
-                {createPlaylistError && (
-                  <p className="text-red-500 text-sm mt-1">{createPlaylistError}</p>
-                )}
-              </div>
-              
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={closeCreatePlaylistModal}
-                  className="px-4 py-2 bg-zinc-700 text-white rounded hover:bg-zinc-600 transition"
-                >
-                  Anuluj
-                </button>
-                <button
-                  onClick={handleCreatePlaylist}
-                  disabled={isCreatingPlaylist}
-                  className={`px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition flex items-center ${
-                    isCreatingPlaylist ? 'opacity-70 cursor-not-allowed' : ''
-                  }`}
-                >
-                  {isCreatingPlaylist ? (
-                    <>
-                      <div className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent mr-2"></div>
-                      Tworzenie...
-                    </>
-                  ) : (
-                    'Utwórz playlistę'
-                  )}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
       
       {/* Animated Music player section */}
       <AnimatePresence>
@@ -1006,13 +830,6 @@ const HomePage = () => {
                       </svg>
                       Odtwórz wszystkie
                     </button>
-                    <button
-                      onClick={handleDeletePlaylist}
-                      className="px-3 py-1 text-sm bg-red-600 bg-opacity-70 text-white rounded hover:bg-red-700 hover:bg-opacity-90 transition"
-                      title="Usuń playlistę"
-                    >
-                      Usuń playlistę
-                    </button>
                   </div>
                 </div>
 
@@ -1134,15 +951,6 @@ const HomePage = () => {
                   <h3 className="text-lg font-semibold text-white">
                     {isSearchResults ? "Znalezione playlisty" : "Twoje playlisty"}
                   </h3>
-                  
-                  {/* Add Playlist button that's always visible */}
-                  <button
-                    onClick={openCreatePlaylistModal}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 bg-opacity-80 text-white rounded-md hover:bg-blue-700 transition text-sm"
-                  >
-                    <Plus size={16} />
-                    Nowa playlista
-                  </button>
                 </div>
                 
                 {loadingPlaylists ? (
@@ -1157,13 +965,7 @@ const HomePage = () => {
                     ) : (
                       <>
                         <p>Nie masz jeszcze żadnych playlist</p>
-                        <p className="text-sm mt-2">Stwórz nową playlistę, aby organizować swoją muzykę</p>
-                        <button
-                          className="mt-4 px-4 py-2 bg-blue-600 bg-opacity-80 text-white rounded hover:bg-blue-700"
-                          onClick={openCreatePlaylistModal}
-                        >
-                          Stwórz playlistę
-                        </button>
+                        <p className="text-sm mt-2">Twoje playlisty pojawią się tutaj</p>
                       </>
                     )}
                   </div>
