@@ -83,6 +83,9 @@ const AdminPanel = () => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [editImageFile, setEditImageFile] = useState<File | null>(null);
 
+  // Add state for tracking image cache busting
+  const [imageKeys, setImageKeys] = useState<{[key: number]: number}>({});
+
   // Redirect if not admin
   React.useEffect(() => {
     if (!isadmin) {
@@ -753,6 +756,12 @@ const AdminPanel = () => {
             );
             
             if (imageResponse.data.success) {
+              // Force image refresh by updating the cache-busting key
+              setImageKeys(prev => ({
+                ...prev,
+                [editingSong.ID_utworu]: Date.now()
+              }));
+              
               alert("Piosenka i obraz zostały pomyślnie zaktualizowane.");
             } else {
               alert("Piosenka została zaktualizowana, ale wystąpił problem z przesłaniem nowego obrazu.");
@@ -767,6 +776,23 @@ const AdminPanel = () => {
         
         // Update the song in the local state
         setManagementSearchResults(prevResults => 
+          prevResults.map(song => 
+            song.ID_utworu === editingSong.ID_utworu 
+            ? {
+                ...song,
+                nazwa_utworu: editFormData.nazwa_utworu,
+                data_wydania: editFormData.data_wydania,
+                Autor: {
+                  ...song.Autor,
+                  kryptonim_artystyczny: editFormData.kryptonim_artystyczny
+                }
+              }
+            : song
+          )
+        );
+        
+        // Also update search results if in delete mode
+        setSearchResults(prevResults => 
           prevResults.map(song => 
             song.ID_utworu === editingSong.ID_utworu 
             ? {
@@ -798,6 +824,35 @@ const AdminPanel = () => {
       setIsUpdating(false);
     }
   };
+
+  // Helper function to get song image URL with cache busting
+  const getSongImageUrl = (songId: number) => {
+    const cacheKey = imageKeys[songId] || 0;
+    return `http://localhost:5000/files/image/${songId}?t=${cacheKey}`;
+  };
+
+  // Helper function to render song image with error handling
+  const renderSongImage = (song: Song, className: string) => (
+    <div className={`flex-shrink-0 rounded-md overflow-hidden bg-gray-700 ${className}`}>
+      <img
+        src={getSongImageUrl(song.ID_utworu)}
+        alt={`Okładka ${song.nazwa_utworu}`}
+        className="w-full h-full object-cover"
+        onError={(e) => {
+          // Replace with music note icon on error
+          const target = e.target as HTMLImageElement;
+          target.style.display = 'none';
+          target.parentElement!.innerHTML = `
+            <div class="w-full h-full flex items-center justify-center bg-gray-600">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+              </svg>
+            </div>
+          `;
+        }}
+      />
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-800 text-white p-4">
@@ -1032,26 +1087,8 @@ const AdminPanel = () => {
                     {searchResults.map((song) => (
                       <li key={song.ID_utworu} className="py-3 flex justify-between items-center">
                         <div className="flex items-center space-x-3">
-                          {/* Song Image */}
-                          <div className="w-12 h-12 flex-shrink-0 rounded-md overflow-hidden bg-gray-700">
-                            <img
-                              src={`http://localhost:5000/files/image/${song.ID_utworu}`}
-                              alt={`Okładka ${song.nazwa_utworu}`}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                // Replace with music note icon on error
-                                const target = e.target as HTMLImageElement;
-                                target.style.display = 'none';
-                                target.parentElement!.innerHTML = `
-                                  <div class="w-full h-full flex items-center justify-center bg-gray-600">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-                                    </svg>
-                                  </div>
-                                `;
-                              }}
-                            />
-                          </div>
+                          {/* Song Image with cache busting */}
+                          {renderSongImage(song, "w-12 h-12")}
                           
                           {/* Song Info */}
                           <div>
@@ -1384,26 +1421,8 @@ const AdminPanel = () => {
                     {managementSearchResults.map((song) => (
                       <li key={song.ID_utworu} className="py-3 flex justify-between items-center">
                         <div className="flex items-center space-x-3">
-                          {/* Song Image */}
-                          <div className="w-12 h-12 flex-shrink-0 rounded-md overflow-hidden bg-gray-700">
-                            <img
-                              src={`http://localhost:5000/files/image/${song.ID_utworu}`}
-                              alt={`Okładka ${song.nazwa_utworu}`}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                // Replace with music note icon on error
-                                const target = e.target as HTMLImageElement;
-                                target.style.display = 'none';
-                                target.parentElement!.innerHTML = `
-                                  <div class="w-full h-full flex items-center justify-center bg-gray-600">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-                                    </svg>
-                                  </div>
-                                `;
-                              }}
-                            />
-                          </div>
+                          {/* Song Image with cache busting */}
+                          {renderSongImage(song, "w-12 h-12")}
                           
                           {/* Song Info */}
                           <div>

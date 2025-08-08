@@ -77,6 +77,34 @@ const HomePage = () => {
   const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Helper function to get song image URL with cache busting
+  const getSongImageUrl = (songId: number) => {
+    return `http://localhost:5000/files/image/${songId}?t=${Date.now()}`;
+  };
+
+  // Helper function to render song image with error handling
+  const renderSongImage = (song: Song, className: string) => (
+    <div className={`flex-shrink-0 rounded-md overflow-hidden bg-gray-700 ${className}`}>
+      <img
+        src={getSongImageUrl(song.ID_utworu)}
+        alt={`Okładka ${song.nazwa_utworu}`}
+        className="w-full h-full object-cover"
+        onError={(e) => {
+          // Replace with music note icon on error
+          const target = e.target as HTMLImageElement;
+          target.style.display = 'none';
+          target.parentElement!.innerHTML = `
+            <div class="w-full h-full flex items-center justify-center bg-gray-600">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+              </svg>
+            </div>
+          `;
+        }}
+      />
+    </div>
+  );
+
   // Initialize local song list with all available songs
   useEffect(() => {
     if (allSongs.length > 0) {
@@ -412,10 +440,10 @@ const HomePage = () => {
               <div className="flex flex-col">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center space-x-4 w-full">
-                    {/* Song Image in Player */}
+                    {/* Song Image in Player with cache busting */}
                     <div className="w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-700">
                       <img
-                        src={`http://localhost:5000/files/image/${currentSong.ID_utworu}`}
+                        src={getSongImageUrl(currentSong.ID_utworu)}
                         alt={`Okładka ${currentSong.nazwa_utworu}`}
                         className="w-full h-full object-cover"
                         onError={(e) => {
@@ -633,26 +661,8 @@ const HomePage = () => {
                     >
                       <div className="flex justify-between items-center">
                         <div className="flex items-center space-x-3">
-                          {/* Song Image */}
-                          <div className="w-12 h-12 flex-shrink-0 rounded-md overflow-hidden bg-gray-700">
-                            <img
-                              src={`http://localhost:5000/files/image/${song.ID_utworu}`}
-                              alt={`Okładka ${song.nazwa_utworu}`}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                // Replace with music note icon on error
-                                const target = e.target as HTMLImageElement;
-                                target.style.display = 'none';
-                                target.parentElement!.innerHTML = `
-                                  <div class="w-full h-full flex items-center justify-center bg-gray-600">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-                                    </svg>
-                                  </div>
-                                `;
-                              }}
-                            />
-                          </div>
+                          {/* Song Image with cache busting */}
+                          {renderSongImage(song, "w-12 h-12")}
                           
                           {/* Song Info */}
                           <div>
@@ -860,26 +870,8 @@ const HomePage = () => {
                         >
                           <div className="flex justify-between items-center">
                             <div className="flex items-center space-x-3">
-                              {/* Song Image */}
-                              <div className="w-12 h-12 flex-shrink-0 rounded-md overflow-hidden bg-gray-700">
-                                <img
-                                  src={`http://localhost:5000/files/image/${song.ID_utworu}`}
-                                  alt={`Okładka ${song.nazwa_utworu}`}
-                                  className="w-full h-full object-cover"
-                                  onError={(e) => {
-                                    // Replace with music note icon on error
-                                    const target = e.target as HTMLImageElement;
-                                    target.style.display = 'none';
-                                    target.parentElement!.innerHTML = `
-                                      <div class="w-full h-full flex items-center justify-center bg-gray-600">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-                                        </svg>
-                                      </div>
-                                    `;
-                                  }}
-                                />
-                              </div>
+                              {/* Song Image with cache busting */}
+                              {renderSongImage(song, "w-12 h-12")}
                               
                               {/* Song Info */}
                               <div>
