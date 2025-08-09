@@ -39,6 +39,7 @@ interface AudioPlayerContextType {
   toggleLoop: () => void;
   toggleFavorite: (songId: number) => Promise<void>;
   currentSongIndex: number; // Index of the current song in the playlist
+  refreshSongs: () => Promise<void>; // Dodaj tę linię
 }
 
 const AudioPlayerContext = createContext<AudioPlayerContextType | undefined>(undefined);
@@ -580,6 +581,27 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [currentSongIndex, playlist]);
 
+  // Dodaj tę funkcję
+  const refreshSongs = async () => {
+    try {
+      const response = await axios.get("http://localhost:5000/files/list", {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.data && response.data.utwory) {
+        const songs = response.data.utwory
+          .sort((a: Song, b: Song) => b.ID_utworu - a.ID_utworu)
+          .slice(0, 100);
+        
+        setAllSongs(songs);
+      }
+    } catch (err) {
+      console.error("Error refreshing songs:", err);
+    }
+  };
+
   return (
     <AudioPlayerContext.Provider
       value={{
@@ -604,6 +626,7 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
         toggleLoop,
         toggleFavorite,
         currentSongIndex,
+        refreshSongs, // Dodaj tę linię
       }}
     >
       {audioElement}

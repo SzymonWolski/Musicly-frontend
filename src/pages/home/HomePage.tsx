@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useAudioPlayer } from "@/context/AudioPlayerContext";
 import { useAuth } from "@/context/AuthContext";
-import { Plus, Search, Music, ListMusic, X } from "lucide-react";
+import { Plus, Search, Music, ListMusic, X, RefreshCw } from "lucide-react"; // Dodaj RefreshCw
 import axios from "axios";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -43,7 +43,8 @@ const HomePage = () => {
     seekTo,
     setVolume,
     toggleLoop,
-    toggleFavorite
+    toggleFavorite,
+    refreshSongs // Dodaj tę linię
   } = useAudioPlayer();
   
   // Search states
@@ -56,6 +57,7 @@ const HomePage = () => {
   const [isVolumeVisible, setIsVolumeVisible] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
   const [audioError, setAudioError] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Tab navigation state
   const [activeTab, setActiveTab] = useState<'songs' | 'playlists'>('songs');
@@ -108,12 +110,8 @@ const HomePage = () => {
 
   // Initialize local song list with all available songs
   useEffect(() => {
-    if (allSongs.length > 0) {
-      setSongs(allSongs);
-      setLoading(false);
-    } else {
-      setLoading(false);
-    }
+    setSongs(allSongs);
+    setLoading(false);
   }, [allSongs]);
 
   // Fetch user playlists
@@ -414,6 +412,18 @@ const HomePage = () => {
     }
   };
 
+  // Dodaj funkcję do ręcznego odświeżania
+  const handleRefreshSongs = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshSongs();
+    } catch (error) {
+      console.error("Error refreshing songs:", error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full rounded-lg" 
       style={{
@@ -606,32 +616,55 @@ const HomePage = () => {
         {/* Conditional content based on active tab */}
         {activeTab === 'songs' ? (
           <>
-            {/* Search moved inside the songs container */}
+            {/* Search z przyciskiem odświeżania */}
             <div className="p-4 border-b border-gray-700">
-              <div className="flex bg-gray-800 bg-opacity-50 rounded-lg overflow-hidden">
-                <input
-                  type="text"
-                  placeholder="Wyszukaj piosenkę po tytule lub artyście"
-                  value={searchQuery}
-                  onChange={handleSearchChange}
-                  onKeyPress={handleKeyPress}
-                  className="flex-grow p-2 bg-transparent text-white border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-l-lg"
-                />
-                <button 
-                  onClick={handleSearch}
-                  disabled={isSearching}
-                  className={`px-4 py-2 bg-blue-600 bg-opacity-80 text-white hover:bg-blue-700 hover:bg-opacity-90 transition ${
-                    isSearching ? "opacity-70 cursor-not-allowed" : ""
+              <div className="flex gap-2">
+                <div className="flex-1 bg-gray-800 bg-opacity-50 rounded-lg overflow-hidden">
+                  <div className="flex">
+                    <input
+                      type="text"
+                      placeholder="Wyszukaj piosenkę po tytule lub artyście"
+                      value={searchQuery}
+                      onChange={handleSearchChange}
+                      onKeyPress={handleKeyPress}
+                      className="flex-grow p-2 bg-transparent text-white border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-l-lg"
+                    />
+                    <button 
+                      onClick={handleSearch}
+                      disabled={isSearching}
+                      className={`px-4 py-2 bg-blue-600 bg-opacity-80 text-white hover:bg-blue-700 hover:bg-opacity-90 transition ${
+                        isSearching ? "opacity-70 cursor-not-allowed" : ""
+                      }`}
+                    >
+                      <Search size={16} />
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Przycisk odświeżania */}
+                <button
+                  onClick={handleRefreshSongs}
+                  disabled={isRefreshing}
+                  className={`px-3 py-2 bg-green-600 bg-opacity-80 text-white rounded-lg hover:bg-green-700 hover:bg-opacity-90 transition flex items-center ${
+                    isRefreshing ? "opacity-70 cursor-not-allowed" : ""
                   }`}
+                  title="Odśwież listę utworów"
                 >
-                  <Search size={16} />
+                  <RefreshCw size={16} className={isRefreshing ? "animate-spin" : ""} />
                 </button>
               </div>
             </div>
 
-            <h3 className="text-lg font-semibold text-white mb-2 px-4 pt-2">
-              {isSearchResults ? "Znalezione utwory" : "Ostatnio dodane utwory"}
-            </h3>
+            <div className="flex justify-between items-center px-4 pt-2 mb-2">
+              <h3 className="text-lg font-semibold text-white">
+                {isSearchResults ? "Znalezione utwory" : "Ostatnio dodane utwory"}
+              </h3>
+              {!isSearchResults && (
+                <span className="text-sm text-gray-400">
+                  {songs.length} utwor{songs.length === 1 ? '' : songs.length < 5 ? 'y' : 'ów'}
+                </span>
+              )}
+            </div>
             
             {loading ? (
               <div className="flex justify-center items-center h-40">
