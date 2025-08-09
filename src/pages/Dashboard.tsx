@@ -1,6 +1,6 @@
 import { useAuth } from "../context/AuthContext";
 import { useState, useRef, useEffect } from "react";
-import { Upload, Plus, ListMusic, X, Edit2, Trash2, ArrowLeft, Play } from "lucide-react";
+import { Upload, Plus, ListMusic, X, Trash2, ArrowLeft } from "lucide-react";
 import axios from "axios";
 import { useAudioPlayer } from "../context/AudioPlayerContext";
 
@@ -9,13 +9,19 @@ interface Playlist {
   name: string;
   songCount: number;
   imageFilename?: string;
+  createdBy?: {
+    id: number;
+    username: string;
+    firstName: string;
+    lastName: string;
+  };
 }
 
 interface Song {
   ID_utworu: number;
   nazwa_utworu: string;
   data_wydania: string;
-  likes_count: number;
+  likes_count?: number; // Made optional since backend might not provide it
   Autor: {
     imie: string;
     nazwisko: string;
@@ -158,17 +164,26 @@ const Dashboard = () => {
   const fetchUserPlaylists = async () => {
     setLoadingPlaylists(true);
     try {
-      const response = await axios.get('http://localhost:5000/playlists', {
+      const response = await axios.get('http://localhost:5000/playlists?myOnly=true', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
       
       if (response.data && Array.isArray(response.data.playlists)) {
-        setUserPlaylists(response.data.playlists);
+        // Map the response to match our interface
+        const mappedPlaylists = response.data.playlists.map((playlist: any) => ({
+          id: playlist.id,
+          name: playlist.name,
+          songCount: parseInt(playlist.songCount) || 0,
+          imageFilename: playlist.imageFilename,
+          createdBy: playlist.createdBy
+        }));
+        
+        setUserPlaylists(mappedPlaylists);
         
         // Fetch images for playlists that have them
-        response.data.playlists.forEach((playlist: Playlist) => {
+        mappedPlaylists.forEach((playlist: Playlist) => {
           if (playlist.imageFilename) {
             fetchPlaylistImage(playlist.id);
           }
@@ -217,17 +232,13 @@ const Dashboard = () => {
     setCreatePlaylistError('');
     
     try {
-      const formData = new FormData();
-      formData.append('name', newPlaylistName.trim());
-      
-      if (newPlaylistImage) {
-        formData.append('playlistImage', newPlaylistImage);
-      }
-      
-      const response = await axios.post('http://localhost:5000/playlists', formData, {
+      // Najpierw utwórz playlistę (bez obrazu)
+      const response = await axios.post('http://localhost:5000/playlists', {
+        name: newPlaylistName.trim()
+      }, {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data'
+          'Content-Type': 'application/json'
         }
       });
       
@@ -236,21 +247,49 @@ const Dashboard = () => {
           id: response.data.playlist.id,
           name: response.data.playlist.name,
           songCount: 0,
-          imageFilename: response.data.playlist.imageFilename
+          imageFilename: undefined
         };
         
-        setUserPlaylists(prev => [...prev, newPlaylist]);
-        
-        if (newPlaylist.imageFilename) {
-          fetchPlaylistImage(newPlaylist.id);
+        // Jeśli wybrano obraz, prześlij go osobno
+        if (newPlaylistImage) {
+          try {
+            const imageFormData = new FormData();
+            imageFormData.append('image', newPlaylistImage);
+            
+            const imageResponse = await axios.post(
+              `http://localhost:5000/playlists/${newPlaylist.id}/image`, 
+              imageFormData, 
+              {
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'multipart/form-data'
+                }
+              }
+            );
+            
+            if (imageResponse.data && imageResponse.data.image) {
+              newPlaylist.imageFilename = imageResponse.data.image.imageFilename;
+              // Pobierz obraz do wyświetlenia
+              fetchPlaylistImage(newPlaylist.id);
+            }
+          } catch (imageError) {
+            console.error('Error uploading playlist image:', imageError);
+            // Nie przerywamy procesu - playlista została utworzona, tylko obraz się nie udał
+          }
         }
+        
+        setUserPlaylists(prev => [...prev, newPlaylist]);
       }
       
       closeCreatePlaylistModal();
       
     } catch (error) {
       console.error('Error creating playlist:', error);
-      setCreatePlaylistError('Nie udało się utworzyć playlisty. Spróbuj ponownie.');
+      if (axios.isAxiosError(error) && error.response?.data?.error) {
+        setCreatePlaylistError(error.response.data.error);
+      } else {
+        setCreatePlaylistError('Nie udało się utworzyć playlisty. Spróbuj ponownie.');
+      }
     } finally {
       setIsCreatingPlaylist(false);
     }
@@ -259,8 +298,8 @@ const Dashboard = () => {
   const validatePlaylistImage = (file: File) => {
     const img = new Image();
     img.onload = () => {
-      if (img.width !== 1000 || img.height !== 1000) {
-        alert('Obraz playlisty musi mieć wymiary 1000x1000 pikseli');
+      if (img.width > 1000 || img.height > 1000) {
+        alert('Obraz playlisty nie może przekraczać wymiarów 1000x1000 pikseli');
         return;
       }
       setNewPlaylistImage(file);
@@ -336,7 +375,12 @@ const Dashboard = () => {
       });
       
       if (response.data && Array.isArray(response.data.songs)) {
-        setPlaylistSongs(response.data.songs);
+        // Add likes_count: 0 as default since backend doesn't provide it yet
+        const songsWithLikes = response.data.songs.map((song: any) => ({
+          ...song,
+          likes_count: song.likes_count || 0
+        }));
+        setPlaylistSongs(songsWithLikes);
       } else {
         setPlaylistSongs([]);
       }
@@ -392,7 +436,12 @@ const Dashboard = () => {
   // Handle playing a song from playlist
   const handlePlaySong = async (song: Song) => {
     try {
-      await playSong(song, 'single');
+      // Ensure likes_count is always a number for playSong
+      const songWithLikes = {
+        ...song,
+        likes_count: song.likes_count || 0
+      };
+      await playSong(songWithLikes, 'single');
     } catch (error) {
       console.error('Error playing song:', error);
       alert('Nie można załadować utworu. Spróbuj ponownie.');
@@ -706,7 +755,7 @@ const Dashboard = () => {
                     <>
                       <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
                       <p className="text-gray-400">Kliknij aby wybrać obraz</p>
-                      <p className="text-xs text-gray-500 mt-1">PNG, JPG - wymiary 1000x1000px</p>
+                      <p className="text-xs text-gray-500 mt-1">PNG, JPG - maksymalnie 1000x1000px</p>
                     </>
                   )}
                 </div>

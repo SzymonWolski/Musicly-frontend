@@ -22,6 +22,7 @@ interface Playlist {
   name: string;
   songCount: number;
   imageFilename?: string;
+  createdBy: string; // Changed to required string for creator's nick
 }
 
 const HomePage = () => {
@@ -136,8 +137,36 @@ const HomePage = () => {
     };
   }, []);
 
-  // Function to fetch playlist image
-  const fetchPlaylistImage = async (playlistId: number) => {
+  const fetchUserPlaylists = async () => {
+    setLoadingPlaylists(true);
+    try {
+      const response = await axios.get('http://localhost:5000/playlists', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.data && Array.isArray(response.data.playlists)) {
+        setUserPlaylists(response.data.playlists);
+        setFilteredPlaylists(response.data.playlists);
+        
+        // Fetch images for playlists that have them - POPRAWKA
+        const imagePromises = response.data.playlists
+          .filter((playlist: Playlist) => playlist.imageFilename)
+          .map((playlist: Playlist) => fetchPlaylistImage(playlist.id));
+        
+        // Czekaj na wszystkie obrazy
+        await Promise.allSettled(imagePromises);
+      }
+    } catch (error) {
+      console.error('Error fetching playlists:', error);
+    } finally {
+      setLoadingPlaylists(false);
+    }
+  };
+
+  // Function to fetch playlist image - POPRAWKA
+  const fetchPlaylistImage = async (playlistId: number): Promise<void> => {
     try {
       const response = await fetch(`http://localhost:5000/playlists/${playlistId}/image`, {
         headers: {
@@ -152,9 +181,11 @@ const HomePage = () => {
           ...prev,
           [playlistId]: imageUrl
         }));
+      } else {
+        console.warn(`Failed to fetch image for playlist ${playlistId}:`, response.status);
       }
     } catch (error) {
-      console.error('Error fetching playlist image:', error);
+      console.error(`Error fetching playlist image for ${playlistId}:`, error);
     }
   };
 
@@ -171,42 +202,6 @@ const HomePage = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
-
-  const fetchUserPlaylists = async () => {
-    setLoadingPlaylists(true);
-    try {
-      const response = await axios.get('http://localhost:5000/playlists', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (response.data && Array.isArray(response.data.playlists)) {
-        setUserPlaylists(response.data.playlists);
-        setFilteredPlaylists(response.data.playlists);
-        
-        // Fetch images for playlists that have them
-        response.data.playlists.forEach((playlist: Playlist) => {
-          if (playlist.imageFilename) {
-            fetchPlaylistImage(playlist.id);
-          }
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching playlists:', error);
-    } finally {
-      setLoadingPlaylists(false);
-    }
-  };
-
-  // Clean up playlist image URLs when component unmounts
-  useEffect(() => {
-    return () => {
-      Object.values(playlistImages).forEach(url => {
-        URL.revokeObjectURL(url);
-      });
-    };
-  }, [playlistImages]);
 
   // Format time helper function
   const formatTime = (time: number) => {
@@ -941,7 +936,7 @@ const HomePage = () => {
                 {/* Modified to include a flex container with the New Playlist button */}
                 <div className="flex justify-between items-center px-4 pt-2 mb-2">
                   <h3 className="text-lg font-semibold text-white">
-                    {isSearchResults ? "Znalezione playlisty" : "Twoje playlisty"}
+                    {isSearchResults ? "Znalezione playlisty" : "Wszystkie playlisty"}
                   </h3>
                 </div>
                 
@@ -956,8 +951,8 @@ const HomePage = () => {
                       "Nie znaleziono pasujących playlist"
                     ) : (
                       <>
-                        <p>Nie masz jeszcze żadnych playlist</p>
-                        <p className="text-sm mt-2">Twoje playlisty pojawią się tutaj</p>
+                        <p>Brak dostępnych playlist</p>
+                        <p className="text-sm mt-2">Playlisty użytkowników pojawią się tutaj</p>
                       </>
                     )}
                   </div>
@@ -995,6 +990,7 @@ const HomePage = () => {
                         <div className="p-3">
                           <h4 className="font-medium text-white truncate">{playlist.name}</h4>
                           <p className="text-sm text-gray-400">{playlist.songCount} utwor{playlist.songCount === 1 ? '' : playlist.songCount < 5 ? 'y' : 'ów'}</p>
+                          <p className="text-xs text-gray-500 mt-1">Utworzona przez: {playlist.createdBy}</p>
                         </div>
                       </div>
                     ))}
