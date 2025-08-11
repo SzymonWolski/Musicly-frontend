@@ -50,6 +50,11 @@ const Dashboard = () => {
   const [playlistImages, setPlaylistImages] = useState<{[key: number]: string}>({});
   const playlistFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Favorite playlists states
+  const [favoritePlaylists, setFavoritePlaylists] = useState<Playlist[]>([]);
+  const [loadingFavoritePlaylists, setLoadingFavoritePlaylists] = useState(false);
+  const [favoritePlaylistImages, setFavoritePlaylistImages] = useState<{[key: number]: string}>({});
+
   // Playlist content view states
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
   const [playlistSongs, setPlaylistSongs] = useState<Song[]>([]);
@@ -158,6 +163,7 @@ const Dashboard = () => {
   useEffect(() => {
     if (token) {
       fetchUserPlaylists();
+      fetchFavoritePlaylists();
     }
   }, [token]);
 
@@ -196,6 +202,46 @@ const Dashboard = () => {
     }
   };
 
+  const fetchFavoritePlaylists = async () => {
+    setLoadingFavoritePlaylists(true);
+    try {
+      const response = await axios.get('http://localhost:5000/favorites/playlists', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.data && Array.isArray(response.data.favoritePlaylists)) {
+        // Map the response to match our interface - the backend returns different field names
+        const mappedPlaylists = response.data.favoritePlaylists.map((playlist: any) => ({
+          id: playlist.playlistId,
+          name: playlist.playlistName,
+          songCount: parseInt(playlist.songCount) || 0,
+          imageFilename: playlist.imageFilename,
+          createdBy: {
+            id: 0, // Not provided by favorites endpoint
+            username: playlist.createdBy,
+            firstName: '',
+            lastName: ''
+          }
+        }));
+        
+        setFavoritePlaylists(mappedPlaylists);
+        
+        // Fetch images for favorite playlists that have them
+        mappedPlaylists.forEach((playlist: Playlist) => {
+          if (playlist.imageFilename) {
+            fetchFavoritePlaylistImage(playlist.id);
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching favorite playlists:', error);
+    } finally {
+      setLoadingFavoritePlaylists(false);
+    }
+  };
+
   const fetchPlaylistImage = async (playlistId: number) => {
     try {
       const response = await fetch(`http://localhost:5000/playlists/${playlistId}/image`, {
@@ -214,6 +260,47 @@ const Dashboard = () => {
       }
     } catch (error) {
       console.error('Error fetching playlist image:', error);
+    }
+  };
+
+  const fetchFavoritePlaylistImage = async (playlistId: number) => {
+    try {
+      // Use the public endpoint for favorite playlists since we might not own them
+      const response = await fetch(`http://localhost:5000/playlists/${playlistId}/image/public`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const imageUrl = URL.createObjectURL(blob);
+        setFavoritePlaylistImages(prev => ({
+          ...prev,
+          [playlistId]: imageUrl
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching favorite playlist image:', error);
+      // If public endpoint fails, try the regular endpoint in case user owns the playlist
+      try {
+        const response = await fetch(`http://localhost:5000/playlists/${playlistId}/image`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (response.ok) {
+          const blob = await response.blob();
+          const imageUrl = URL.createObjectURL(blob);
+          setFavoritePlaylistImages(prev => ({
+            ...prev,
+            [playlistId]: imageUrl
+          }));
+        }
+      } catch (fallbackError) {
+        console.error('Error fetching playlist image (fallback):', fallbackError);
+      }
     }
   };
 
@@ -450,7 +537,7 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-800 text-white p-4">
-      <div className="max-w-4xl mx-auto bg-gray-700 rounded-lg p-8 shadow-lg">
+      <div className="max-w-7xl mx-auto bg-gray-700 rounded-lg p-8 shadow-lg">
         <h1 className="text-3xl font-bold mb-8 text-center">Twój Profil</h1>
 
         <div className="space-y-8">
@@ -622,78 +709,132 @@ const Dashboard = () => {
                 )}
               </div>
             ) : (
-              <>
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-2xl font-bold text-white">Twoje Playlisty</h2>
-                  <button
-                    onClick={openCreatePlaylistModal}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                  >
-                    <Plus size={20} />
-                    Nowa Playlista
-                  </button>
-                </div>
-
-                {loadingPlaylists ? (
-                  <div className="flex justify-center items-center h-40">
-                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
-                  </div>
-                ) : userPlaylists.length === 0 ? (
-                  <div className="bg-gray-600 rounded-lg text-center text-gray-300 p-8">
-                    <ListMusic size={48} className="mx-auto mb-4 text-gray-400" />
-                    <p className="text-lg mb-2">Nie masz jeszcze żadnych playlist</p>
-                    <p className="text-sm text-gray-400">Stwórz swoją pierwszą playlistę, aby organizować swoją muzykę</p>
+              /* Main playlists view - split into two columns */
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Left Column - Your Playlists */}
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-2xl font-bold text-white">Twoje Playlisty</h2>
                     <button
                       onClick={openCreatePlaylistModal}
-                      className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
                     >
-                      Stwórz Playlistę
+                      <Plus size={20} />
+                      Nowa Playlista
                     </button>
                   </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {userPlaylists.map((playlist) => (
-                      <div 
-                        key={playlist.id}
-                        className="bg-gray-600 rounded-lg overflow-hidden hover:bg-gray-500 transition group cursor-pointer"
-                        onClick={() => openPlaylistContent(playlist)}
+
+                  {loadingPlaylists ? (
+                    <div className="flex justify-center items-center h-40">
+                      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
+                    </div>
+                  ) : userPlaylists.length === 0 ? (
+                    <div className="bg-gray-600 rounded-lg text-center text-gray-300 p-8">
+                      <ListMusic size={48} className="mx-auto mb-4 text-gray-400" />
+                      <p className="text-lg mb-2">Nie masz jeszcze żadnych playlist</p>
+                      <p className="text-sm text-gray-400">Stwórz swoją pierwszą playlistę, aby organizować swoją muzykę</p>
+                      <button
+                        onClick={openCreatePlaylistModal}
+                        className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
                       >
-                        <div className="h-32 bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center relative">
-                          {playlist.imageFilename && playlistImages[playlist.id] ? (
-                            <img
-                              src={playlistImages[playlist.id]}
-                              alt={`Okładka ${playlist.name}`}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <ListMusic size={48} className="text-white" />
-                          )}
+                        Stwórz Playlistę
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {userPlaylists.map((playlist) => (
+                        <div 
+                          key={playlist.id}
+                          className="bg-gray-600 rounded-lg overflow-hidden hover:bg-gray-500 transition group cursor-pointer flex"
+                          onClick={() => openPlaylistContent(playlist)}
+                        >
+                          <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center flex-shrink-0">
+                            {playlist.imageFilename && playlistImages[playlist.id] ? (
+                              <img
+                                src={playlistImages[playlist.id]}
+                                alt={`Okładka ${playlist.name}`}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <ListMusic size={24} className="text-white" />
+                            )}
+                          </div>
                           
-                          {/* Playlist Actions */}
-                          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="flex-1 p-3 flex justify-between items-center">
+                            <div>
+                              <h4 className="font-medium text-white truncate">{playlist.name}</h4>
+                              <p className="text-sm text-gray-300">
+                                {playlist.songCount} utwor{playlist.songCount === 1 ? '' : playlist.songCount < 5 ? 'y' : 'ów'}
+                              </p>
+                            </div>
+                            
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleDeletePlaylist(playlist.id, playlist.name);
                               }}
-                              className="p-1 bg-red-600 bg-opacity-80 text-white rounded hover:bg-red-700 transition"
+                              className="p-2 text-gray-400 hover:text-red-400 transition opacity-0 group-hover:opacity-100"
                               title="Usuń playlistę"
                             >
                               <Trash2 size={16} />
                             </button>
                           </div>
                         </div>
-                        <div className="p-3">
-                          <h4 className="font-medium text-white truncate">{playlist.name}</h4>
-                          <p className="text-sm text-gray-300">
-                            {playlist.songCount} utwor{playlist.songCount === 1 ? '' : playlist.songCount < 5 ? 'y' : 'ów'}
-                          </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Right Column - Favorite Playlists */}
+                <div className="space-y-4">
+                  <h2 className="text-2xl font-bold text-white">Ulubione Playlisty</h2>
+
+                  {loadingFavoritePlaylists ? (
+                    <div className="flex justify-center items-center h-40">
+                      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-500"></div>
+                    </div>
+                  ) : favoritePlaylists.length === 0 ? (
+                    <div className="bg-gray-600 rounded-lg text-center text-gray-300 p-8">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto mb-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                      </svg>
+                      <p className="text-lg mb-2">Brak ulubionych playlist</p>
+                      <p className="text-sm text-gray-400">Polub playlisty innych użytkowników, aby pojawiły się tutaj</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {favoritePlaylists.map((playlist) => (
+                        <div 
+                          key={playlist.id}
+                          className="bg-gray-600 rounded-lg overflow-hidden hover:bg-gray-500 transition cursor-pointer flex"
+                          onClick={() => openPlaylistContent(playlist)}
+                        >
+                          <div className="w-16 h-16 bg-gradient-to-br from-red-600 to-pink-600 flex items-center justify-center flex-shrink-0">
+                            {playlist.imageFilename && favoritePlaylistImages[playlist.id] ? (
+                              <img
+                                src={favoritePlaylistImages[playlist.id]}
+                                alt={`Okładka ${playlist.name}`}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                          </div>
+                          
+                          <div className="flex-1 p-3">
+                            <h4 className="font-medium text-white truncate">{playlist.name}</h4>
+                            <p className="text-sm text-gray-300">
+                              {playlist.createdBy?.username || 'Nieznany użytkownik'} • {playlist.songCount} utwor{playlist.songCount === 1 ? '' : playlist.songCount < 5 ? 'y' : 'ów'}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>

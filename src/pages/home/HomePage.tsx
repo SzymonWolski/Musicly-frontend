@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useAudioPlayer } from "@/context/AudioPlayerContext";
 import { useAuth } from "@/context/AuthContext";
-import { Plus, Search, Music, ListMusic, X, RefreshCw } from "lucide-react"; // Dodaj RefreshCw
+import { Plus, Search, Music, ListMusic, X, RefreshCw, Heart } from "lucide-react"; // Dodaj Heart
 import axios from "axios";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -22,7 +22,9 @@ interface Playlist {
   name: string;
   songCount: number;
   imageFilename?: string;
-  createdBy: string; // Changed to required string for creator's nick
+  createdBy: string;
+  isFavorite?: boolean; // Dodaj pole isFavorite
+  likesCount?: number; // Dodaj pole likesCount
 }
 
 const HomePage = () => {
@@ -44,7 +46,7 @@ const HomePage = () => {
     setVolume,
     toggleLoop,
     toggleFavorite,
-    refreshSongs // Dodaj tę linię
+    refreshSongs
   } = useAudioPlayer();
   
   // Search states
@@ -145,15 +147,21 @@ const HomePage = () => {
       });
       
       if (response.data && Array.isArray(response.data.playlists)) {
-        setUserPlaylists(response.data.playlists);
-        setFilteredPlaylists(response.data.playlists);
+        // Backend już zwraca likesCount i isFavorite, więc możemy używać danych bezpośrednio
+        const playlistsWithCorrectNaming = response.data.playlists.map((playlist: any) => ({
+          ...playlist,
+          likesCount: playlist.likeCount, // Mapuj likeCount na likesCount dla spójności
+          isFavorite: playlist.isFavorite || false
+        }));
         
-        // Fetch images for playlists that have them - POPRAWKA
-        const imagePromises = response.data.playlists
+        setUserPlaylists(playlistsWithCorrectNaming);
+        setFilteredPlaylists(playlistsWithCorrectNaming);
+        
+        // Fetch images for playlists that have them
+        const imagePromises = playlistsWithCorrectNaming
           .filter((playlist: Playlist) => playlist.imageFilename)
           .map((playlist: Playlist) => fetchPlaylistImage(playlist.id));
         
-        // Czekaj na wszystkie obrazy
         await Promise.allSettled(imagePromises);
       }
     } catch (error) {
@@ -421,6 +429,88 @@ const HomePage = () => {
       console.error("Error refreshing songs:", error);
     } finally {
       setIsRefreshing(false);
+    }
+  };
+
+  // Handle toggling playlist favorite - zaktualizowana funkcja
+  const togglePlaylistFavorite = async (playlistId: number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation(); // Prevent opening playlist when clicking favorite button
+    
+    try {
+      const playlist = userPlaylists.find(p => p.id === playlistId) || selectedPlaylist;
+      if (!playlist) return;
+      
+      let newIsFavorite = false;
+      let newLikesCount = playlist.likesCount || 0;
+      
+      if (playlist.isFavorite) {
+        // Remove from favorites
+        await axios.delete(`http://localhost:5000/favorites/playlists/${playlistId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        newIsFavorite = false;
+        newLikesCount = Math.max(0, newLikesCount - 1);
+      } else {
+        // Add to favorites
+        await axios.post('http://localhost:5000/favorites/playlists', 
+          { playlistId },
+          { headers: { 'Authorization': `Bearer ${token}` } }
+        );
+        newIsFavorite = true;
+        newLikesCount = newLikesCount + 1;
+      }
+      
+      // Update local state
+      const updatePlaylist = (playlist: Playlist) => 
+        playlist.id === playlistId 
+          ? { 
+              ...playlist, 
+              isFavorite: newIsFavorite,
+              likesCount: newLikesCount
+            }
+          : playlist;
+      
+      setUserPlaylists(prev => prev.map(updatePlaylist));
+      setFilteredPlaylists(prev => prev.map(updatePlaylist));
+      
+      if (selectedPlaylist?.id === playlistId) {
+        setSelectedPlaylist(prev => prev ? updatePlaylist(prev) : null);
+      }
+      
+      // Odśwież dane z serwera po chwili dla pewności synchronizacji
+      setTimeout(async () => {
+        try {
+          const response = await axios.get('http://localhost:5000/playlists', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          
+          if (response.data && Array.isArray(response.data.playlists)) {
+            const updatedPlaylist = response.data.playlists.find((p: any) => p.id === playlistId);
+            if (updatedPlaylist) {
+              const playlistWithCorrectNaming = {
+                ...updatedPlaylist,
+                likesCount: updatedPlaylist.likeCount,
+                isFavorite: updatedPlaylist.isFavorite || false
+              };
+              
+              const updateWithServerData = (playlist: Playlist) => 
+                playlist.id === playlistId ? playlistWithCorrectNaming : playlist;
+              
+              setUserPlaylists(prev => prev.map(updateWithServerData));
+              setFilteredPlaylists(prev => prev.map(updateWithServerData));
+              
+              if (selectedPlaylist?.id === playlistId) {
+                setSelectedPlaylist(playlistWithCorrectNaming);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error refreshing playlists:', error);
+        }
+      }, 1000);
+    } catch (error) {
+      console.error('Error toggling playlist favorite:', error);
+      alert('Nie udało się zmienić statusu ulubionej playlisty.');
     }
   };
 
@@ -849,12 +939,33 @@ const HomePage = () => {
                         <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
                       </svg>
                     </button>
-                    <h2 className="text-xl font-bold text-white">{selectedPlaylist.name}</h2>
-                    <span className="ml-2 text-sm text-gray-400">
-                      ({selectedPlaylist.songCount} utwor{selectedPlaylist.songCount === 1 ? '' : selectedPlaylist.songCount < 5 ? 'y' : 'ów'})
-                    </span>
+                    <div>
+                      <h2 className="text-xl font-bold text-white">{selectedPlaylist.name}</h2>
+                      <div className="flex items-center gap-4 text-sm text-gray-400">
+                        <span>
+                          ({selectedPlaylist.songCount} utwor{selectedPlaylist.songCount === 1 ? '' : selectedPlaylist.songCount < 5 ? 'y' : 'ów'})
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <Heart size={14} className={selectedPlaylist.isFavorite ? 'text-red-500' : 'text-gray-500'} />
+                          <span>{selectedPlaylist.likesCount || 0}</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   <div className="flex gap-2">
+                    {/* Favorite button for playlist detail view */}
+                    <button
+                      onClick={(e) => togglePlaylistFavorite(selectedPlaylist.id, e)}
+                      className={`p-2 rounded-full transition ${
+                        selectedPlaylist.isFavorite 
+                          ? 'text-red-500 hover:text-red-400 bg-red-500 bg-opacity-20' 
+                          : 'text-gray-400 hover:text-red-400 hover:bg-red-500 hover:bg-opacity-20'
+                      }`}
+                      title={selectedPlaylist.isFavorite ? "Usuń z ulubionych" : "Dodaj do ulubionych"}
+                    >
+                      <Heart size={20} fill={selectedPlaylist.isFavorite ? 'currentColor' : 'none'} />
+                    </button>
+                    
                     <button
                       onClick={handlePlayAllSongs}
                       disabled={playlistSongs.length === 0}
@@ -994,7 +1105,7 @@ const HomePage = () => {
                     {filteredPlaylists.map((playlist) => (
                       <div 
                         key={playlist.id}
-                        className="bg-zinc-800 bg-opacity-60 rounded-lg overflow-hidden hover:bg-opacity-80 transition cursor-pointer"
+                        className="bg-zinc-800 bg-opacity-60 rounded-lg overflow-hidden hover:bg-opacity-80 transition cursor-pointer relative group"
                         onClick={() => openPlaylistContent(playlist)}
                       >
                         <div className="h-32 bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center relative">
@@ -1019,11 +1130,30 @@ const HomePage = () => {
                           ) : (
                             <ListMusic size={48} className="text-white" />
                           )}
+                          
+                          {/* Favorite button overlay */}
+                          <button
+                            onClick={(e) => togglePlaylistFavorite(playlist.id, e)}
+                            className={`absolute top-2 right-2 p-1.5 rounded-full transition opacity-0 group-hover:opacity-100 ${
+                              playlist.isFavorite 
+                                ? 'text-red-500 bg-black bg-opacity-50' 
+                                : 'text-white bg-black bg-opacity-50 hover:text-red-400'
+                            }`}
+                            title={playlist.isFavorite ? "Usuń z ulubionych" : "Dodaj do ulubionych"}
+                          >
+                            <Heart size={16} fill={playlist.isFavorite ? 'currentColor' : 'none'} />
+                          </button>
                         </div>
                         <div className="p-3">
                           <h4 className="font-medium text-white truncate">{playlist.name}</h4>
                           <p className="text-sm text-gray-400">{playlist.songCount} utwor{playlist.songCount === 1 ? '' : playlist.songCount < 5 ? 'y' : 'ów'}</p>
-                          <p className="text-xs text-gray-500 mt-1">Utworzona przez: {playlist.createdBy}</p>
+                          <div className="flex items-center justify-between mt-1">
+                            <p className="text-xs text-gray-500">Utworzona przez: {playlist.createdBy}</p>
+                            <div className="flex items-center gap-1 text-xs text-gray-500">
+                              <Heart size={12} className={playlist.isFavorite ? 'text-red-500' : 'text-gray-500'} />
+                              <span>{playlist.likesCount || 0}</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ))}
