@@ -12,6 +12,7 @@ const TopBar = () => {
   const { user, logout, isAuthenticated } = useAuth();
   const [imageLoading, setImageLoading] = useState(true);
   const [imageKey, setImageKey] = useState(0); // Key to force image refresh
+  const [userDataKey, setUserDataKey] = useState(0); // Key to force user data refresh
 
   // Force image refresh when updateProfileImage is called
   useEffect(() => {
@@ -20,6 +21,13 @@ const TopBar = () => {
       setImageKey(prev => prev + 1); // Force re-render of img element
     }
   }, [user?.id]);
+
+  // Force user data refresh when user object changes (including nick changes)
+  useEffect(() => {
+    if (user) {
+      setUserDataKey(prev => prev + 1);
+    }
+  }, [user?.nick, user?.email, user?.id]);
 
   const handleImageLoad = () => {
     setImageLoading(false);
@@ -97,7 +105,7 @@ const TopBar = () => {
       <div className="flex items-center space-x-4">
         {isAuthenticated ? (
           <>
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-3" key={userDataKey}>
               <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-600 flex items-center justify-center">
                 {imageLoading && (
                   <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>

@@ -70,6 +70,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const timestamp = new Date().getTime();
       const imageUrl = `http://localhost:5000/profile/profile-image/${user.id}?t=${timestamp}`;
       setProfileImageUrl(imageUrl);
+      
+      // Fetch updated user data from server
+      fetchUserProfile();
+    }
+  };
+
+  const fetchUserProfile = async () => {
+    if (!token) return;
+    
+    try {
+      const response = await fetch('http://localhost:5000/users/profile', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.user) {
+          const updatedUser = {
+            id: data.user.id.toString(),
+            email: data.user.email,
+            nick: data.user.nick,
+            isadmin: data.user.isAdmin
+          };
+          
+          // Update both state and localStorage
+          setUser(updatedUser);
+          localStorage.setItem("user", JSON.stringify(updatedUser));
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
     }
   };
 

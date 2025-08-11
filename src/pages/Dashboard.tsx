@@ -39,6 +39,12 @@ const Dashboard = () => {
   const [imageKey, setImageKey] = useState(0); // Key to force image refresh
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Nickname change states
+  const [showChangeNickModal, setShowChangeNickModal] = useState(false);
+  const [newNickname, setNewNickname] = useState('');
+  const [changeNickLoading, setChangeNickLoading] = useState(false);
+  const [changeNickError, setChangeNickError] = useState('');
+
   // Playlist states
   const [userPlaylists, setUserPlaylists] = useState<Playlist[]>([]);
   const [loadingPlaylists, setLoadingPlaylists] = useState(false);
@@ -588,6 +594,68 @@ const Dashboard = () => {
     }
   };
 
+  // Handle nickname change
+  const handleChangeNickname = async () => {
+    if (!newNickname.trim()) {
+      setChangeNickError('Nick nie może być pusty.');
+      return;
+    }
+
+    if (newNickname.trim().length < 3 || newNickname.trim().length > 30) {
+      setChangeNickError('Nick musi mieć od 3 do 30 znaków.');
+      return;
+    }
+
+    const nickRegex = /^[a-zA-Z0-9_-]+$/;
+    if (!nickRegex.test(newNickname.trim())) {
+      setChangeNickError('Nick może zawierać tylko litery, cyfry, podkreślniki i myślniki.');
+      return;
+    }
+
+    setChangeNickLoading(true);
+    setChangeNickError('');
+
+    try {
+      const response = await axios.put('http://localhost:5000/users/change-nick', {
+        newNick: newNickname.trim()
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.data.success) {
+        // Update user context or trigger refresh
+        updateProfileImage(); // This will refresh user data
+        setShowChangeNickModal(false);
+        setNewNickname('');
+        alert('Nick został pomyślnie zmieniony!');
+      }
+    } catch (error) {
+      console.error('Error changing nickname:', error);
+      if (axios.isAxiosError(error) && error.response?.data?.error) {
+        setChangeNickError(error.response.data.error);
+      } else {
+        setChangeNickError('Nie udało się zmienić nicku. Spróbuj ponownie.');
+      }
+    } finally {
+      setChangeNickLoading(false);
+    }
+  };
+
+  const openChangeNickModal = () => {
+    setShowChangeNickModal(true);
+    setNewNickname(user?.nick || '');
+    setChangeNickError('');
+  };
+
+  const closeChangeNickModal = () => {
+    setShowChangeNickModal(false);
+    setNewNickname('');
+    setChangeNickError('');
+  };
+
   return (
     <div className="min-h-screen bg-gray-800 text-white p-4">
       <div className="max-w-7xl mx-auto bg-gray-700 rounded-lg p-8 shadow-lg">
@@ -633,10 +701,19 @@ const Dashboard = () => {
 
             {/* User Information */}
             <div className="flex-1 space-y-3">
-              <div>
+              <div className="flex items-center gap-3">
                 <div className="text-2xl font-medium text-white">
                   {user?.nick || "Nie ustawiono"}
                 </div>
+                <button
+                  onClick={openChangeNickModal}
+                  className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-600 rounded transition"
+                  title="Zmień nick"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
               </div>
 
               <div>
@@ -948,6 +1025,117 @@ const Dashboard = () => {
         </div>
       </div>
 
+      {/* Change Nickname Modal */}
+      {showChangeNickModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-700 rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">Zmień nick</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="newNickname" className="block text-sm font-medium text-gray-300 mb-1">
+                  Nowy nick *
+                </label>
+                <input
+                  type="text"
+                  id="newNickname"
+                  value={newNickname}
+                  onChange={(e) => setNewNickname(e.target.value)}
+                  maxLength={30}
+                  placeholder="Wprowadź nowy nick"
+                  className="w-full p-2 bg-gray-600 text-white rounded border border-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <div className="flex justify-between items-center mt-1">
+                  <span className="text-xs text-gray-400">
+                    Tylko litery, cyfry, _ i -
+                  </span>
+                  <span className={`text-xs ${
+                    newNickname.length > 25 ? 'text-yellow-400' : 'text-gray-400'
+                  }`}>
+                    {newNickname.length}/30
+                  </span>
+                </div>
+              </div>
+              
+              {changeNickError && (
+                <p className="text-red-400 text-sm">{changeNickError}</p>
+              )}
+              
+              <div className="flex justify-end space-x-3 pt-2">
+                <button
+                  onClick={closeChangeNickModal}
+                  className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition"
+                  disabled={changeNickLoading}
+                >
+                  Anuluj
+                </button>
+                <button
+                  onClick={handleChangeNickname}
+                  disabled={changeNickLoading || !newNickname.trim() || newNickname.trim() === user?.nick}
+                  className={`px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition flex items-center ${
+                    (changeNickLoading || !newNickname.trim() || newNickname.trim() === user?.nick) ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  {changeNickLoading ? (
+                    <>
+                      <div className="animate-spin h-4 w-4 border-2 border-white rounded-full border-t-transparent mr-2"></div>
+                      Zmienianie...
+                    </>
+                  ) : (
+                    'Zmień nick'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-700 rounded-lg p-6 max-w-md w-full mx-4">
+            <h2 className="text-xl font-bold mb-4">Zmień zdjęcie profilowe</h2>
+            
+            <div className="space-y-4">
+              <div
+                className="border-2 border-dashed border-gray-500 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                <p className="text-gray-400">Kliknij aby wybrać zdjęcie</p>
+                <p className="text-sm text-gray-500 mt-2">PNG, JPG do 20MB, max 400x400px</p>
+              </div>
+              
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+              
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowUploadModal(false)}
+                  className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition"
+                  disabled={uploadLoading}
+                >
+                  Anuluj
+                </button>
+              </div>
+            </div>
+            
+            {uploadLoading && (
+              <div className="mt-4 flex items-center justify-center">
+                <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-2"></div>
+                <span>Przesyłanie...</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Create Playlist Modal */}
       {showCreatePlaylistModal && (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
@@ -1048,51 +1236,6 @@ const Dashboard = () => {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Upload Modal */}
-      {showUploadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-700 rounded-lg p-6 max-w-md w-full mx-4">
-            <h2 className="text-xl font-bold mb-4">Zmień zdjęcie profilowe</h2>
-            
-            <div className="space-y-4">
-              <div
-                className="border-2 border-dashed border-gray-500 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500 transition"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                <p className="text-gray-400">Kliknij aby wybrać zdjęcie</p>
-                <p className="text-sm text-gray-500 mt-2">PNG, JPG do 20MB, max 400x400px</p>
-              </div>
-              
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleFileSelect}
-                className="hidden"
-              />
-              
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => setShowUploadModal(false)}
-                  className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition"
-                  disabled={uploadLoading}
-                >
-                  Anuluj
-                </button>
-              </div>
-            </div>
-            
-            {uploadLoading && (
-              <div className="mt-4 flex items-center justify-center">
-                <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-2"></div>
-                <span>Przesyłanie...</span>
-              </div>
-            )}
           </div>
         </div>
       )}
