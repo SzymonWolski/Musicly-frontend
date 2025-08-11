@@ -1,6 +1,6 @@
 import { useAuth } from "../context/AuthContext";
 import { useState, useRef, useEffect } from "react";
-import { Upload, Plus, ListMusic, X, Trash2, ArrowLeft } from "lucide-react";
+import { Upload, Plus, ListMusic, X, ArrowLeft } from "lucide-react";
 import axios from "axios";
 import { useAudioPlayer } from "../context/AudioPlayerContext";
 
@@ -535,6 +535,59 @@ const Dashboard = () => {
     }
   };
 
+  // Handle toggling playlist favorite
+  const togglePlaylistFavorite = async (playlistId: number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation(); // Prevent opening playlist when clicking favorite button
+    
+    try {
+      const playlist = userPlaylists.find(p => p.id === playlistId) || favoritePlaylists.find(p => p.id === playlistId) || selectedPlaylist;
+      if (!playlist) return;
+      
+      let newIsFavorite = false;
+      
+      if (playlist.createdBy?.username) {
+        // This is a favorite playlist, remove from favorites
+        await axios.delete(`http://localhost:5000/favorites/playlists/${playlistId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        newIsFavorite = false;
+        
+        // Remove from favorite playlists list
+        setFavoritePlaylists(prev => prev.filter(p => p.id !== playlistId));
+        
+        // Clean up image URL
+        if (favoritePlaylistImages[playlistId]) {
+          URL.revokeObjectURL(favoritePlaylistImages[playlistId]);
+          setFavoritePlaylistImages(prev => {
+            const newImages = { ...prev };
+            delete newImages[playlistId];
+            return newImages;
+          });
+        }
+        
+        alert('Usunięto z ulubionych playlist!');
+      } else {
+        // This is user's own playlist, add to favorites
+        await axios.post('http://localhost:5000/favorites/playlists', 
+          { playlistId },
+          { headers: { 'Authorization': `Bearer ${token}` } }
+        );
+        newIsFavorite = true;
+        alert('Dodano do ulubionych playlist!');
+      }
+      
+      // Close playlist content view if we removed it from favorites
+      if (!newIsFavorite && selectedPlaylist?.id === playlistId && playlist.createdBy?.username) {
+        setSelectedPlaylist(null);
+        setPlaylistSongs([]);
+      }
+      
+    } catch (error) {
+      console.error('Error toggling playlist favorite:', error);
+      alert('Nie udało się zmienić statusu ulubionej playlisty.');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-800 text-white p-4">
       <div className="max-w-7xl mx-auto bg-gray-700 rounded-lg p-8 shadow-lg">
@@ -619,13 +672,31 @@ const Dashboard = () => {
                       ({selectedPlaylist.songCount} utwor{selectedPlaylist.songCount === 1 ? '' : selectedPlaylist.songCount < 5 ? 'y' : 'ów'})
                     </span>
                   </div>
-                  <button
-                    onClick={() => handleDeletePlaylist(selectedPlaylist.id, selectedPlaylist.name)}
-                    className="px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition"
-                    title="Usuń playlistę"
-                  >
-                    Usuń playlistę
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {/* Favorite button for playlists */}
+                    {selectedPlaylist.createdBy?.username && (
+                      <button
+                        onClick={(e) => togglePlaylistFavorite(selectedPlaylist.id, e)}
+                        className={`p-2 transition ${
+                          selectedPlaylist.createdBy?.username 
+                            ? 'text-red-500 hover:text-red-400' 
+                            : 'text-gray-400 hover:text-red-400'
+                        }`}
+                        title="Usuń z ulubionych"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDeletePlaylist(selectedPlaylist.id, selectedPlaylist.name)}
+                      className="px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition"
+                      title="Usuń playlistę"
+                    >
+                      Usuń playlistę
+                    </button>
+                  </div>
                 </div>
 
                 {loadingPlaylistSongs ? (
@@ -713,7 +784,7 @@ const Dashboard = () => {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Left Column - Your Playlists */}
                 <div className="space-y-4">
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-center h-10">
                     <h2 className="text-2xl font-bold text-white">Twoje Playlisty</h2>
                     <button
                       onClick={openCreatePlaylistModal}
@@ -733,22 +804,22 @@ const Dashboard = () => {
                       <ListMusic size={48} className="mx-auto mb-4 text-gray-400" />
                       <p className="text-lg mb-2">Nie masz jeszcze żadnych playlist</p>
                       <p className="text-sm text-gray-400">Stwórz swoją pierwszą playlistę, aby organizować swoją muzykę</p>
-                      <button
-                        onClick={openCreatePlaylistModal}
-                        className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-                      >
-                        Stwórz Playlistę
-                      </button>
-                    </div>
+                        <button
+                          onClick={openCreatePlaylistModal}
+                          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                        >
+                          Stwórz Playlistę
+                        </button>
+                      </div>
                   ) : (
                     <div className="space-y-3">
                       {userPlaylists.map((playlist) => (
                         <div 
                           key={playlist.id}
-                          className="bg-gray-600 rounded-lg overflow-hidden hover:bg-gray-500 transition group cursor-pointer flex"
+                          className="bg-gray-600 rounded-lg overflow-hidden hover:bg-gray-500 transition cursor-pointer flex"
                           onClick={() => openPlaylistContent(playlist)}
                         >
-                          <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center flex-shrink-0">
+                          <div className="w-16 h-17 bg-gradient-to-br from-red-600 to-pink-600 flex items-center justify-center flex-shrink-0">
                             {playlist.imageFilename && playlistImages[playlist.id] ? (
                               <img
                                 src={playlistImages[playlist.id]}
@@ -769,14 +840,25 @@ const Dashboard = () => {
                             </div>
                             
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeletePlaylist(playlist.id, playlist.name);
-                              }}
-                              className="p-2 text-gray-400 hover:text-red-400 transition opacity-0 group-hover:opacity-100"
-                              title="Usuń playlistę"
+                              onClick={(e) => togglePlaylistFavorite(playlist.id, e)}
+                              className={`p-2 transition ${
+                                favoritePlaylists.find(fp => fp.id === playlist.id) 
+                                  ? 'text-red-500 hover:text-red-400' 
+                                  : 'text-gray-400 hover:text-red-400'
+                              }`}
+                              title={favoritePlaylists.find(fp => fp.id === playlist.id) ? "Usuń z ulubionych" : "Dodaj do ulubionych"}
                             >
-                              <Trash2 size={16} />
+                              {favoritePlaylists.find(fp => fp.id === playlist.id) ? (
+                                // Filled heart
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
+                                </svg>
+                              ) : (
+                                // Empty heart
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                                </svg>
+                              )}
                             </button>
                           </div>
                         </div>
@@ -787,7 +869,9 @@ const Dashboard = () => {
 
                 {/* Right Column - Favorite Playlists */}
                 <div className="space-y-4">
-                  <h2 className="text-2xl font-bold text-white">Ulubione Playlisty</h2>
+                  <div className="h-10 flex items-center">
+                    <h2 className="text-2xl font-bold text-white">Ulubione Playlisty</h2>
+                  </div>
 
                   {loadingFavoritePlaylists ? (
                     <div className="flex justify-center items-center h-40">
@@ -809,7 +893,7 @@ const Dashboard = () => {
                           className="bg-gray-600 rounded-lg overflow-hidden hover:bg-gray-500 transition cursor-pointer flex"
                           onClick={() => openPlaylistContent(playlist)}
                         >
-                          <div className="w-16 h-16 bg-gradient-to-br from-red-600 to-pink-600 flex items-center justify-center flex-shrink-0">
+                          <div className="w-16 h-17 bg-gradient-to-br from-red-600 to-pink-600 flex items-center justify-center flex-shrink-0">
                             {playlist.imageFilename && favoritePlaylistImages[playlist.id] ? (
                               <img
                                 src={favoritePlaylistImages[playlist.id]}
@@ -823,11 +907,35 @@ const Dashboard = () => {
                             )}
                           </div>
                           
-                          <div className="flex-1 p-3">
-                            <h4 className="font-medium text-white truncate">{playlist.name}</h4>
-                            <p className="text-sm text-gray-300">
-                              {playlist.createdBy?.username || 'Nieznany użytkownik'} • {playlist.songCount} utwor{playlist.songCount === 1 ? '' : playlist.songCount < 5 ? 'y' : 'ów'}
-                            </p>
+                          <div className="flex-1 p-3 flex justify-between items-center">
+                            <div>
+                              <h4 className="font-medium text-white truncate">{playlist.name}</h4>
+                              <p className="text-sm text-gray-300">
+                                {playlist.createdBy?.username || 'Nieznany użytkownik'} • {playlist.songCount} utwor{playlist.songCount === 1 ? '' : playlist.songCount < 5 ? 'y' : 'ów'}
+                              </p>
+                            </div>
+                            
+                            <button
+                              onClick={(e) => togglePlaylistFavorite(playlist.id, e)}
+                              className={`p-2 transition ${
+                                playlist.createdBy?.username 
+                                  ? 'text-red-500 hover:text-red-400' 
+                                  : 'text-gray-400 hover:text-red-400'
+                              }`}
+                              title={playlist.createdBy?.username ? "Usuń z ulubionych" : "Dodaj do ulubionych"}
+                            >
+                              {playlist.createdBy?.username ? (
+                                // Filled heart - this is a favorite playlist
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
+                                </svg>
+                              ) : (
+                                // Empty heart - this is user's own playlist, can be favorited
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                                </svg>
+                              )}
+                            </button>
                           </div>
                         </div>
                       ))}
