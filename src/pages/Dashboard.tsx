@@ -717,6 +717,12 @@ const Dashboard = () => {
               </div>
 
               <div>
+                <div className="text-lg text-gray-400">
+                  #{user?.id ? user.id.toString().padStart(10, '0') : '0000000000'}
+                </div>
+              </div>
+
+              <div>
                 <div className="text-lg text-gray-300">
                   {user?.email}
                 </div>

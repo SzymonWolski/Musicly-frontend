@@ -105,7 +105,26 @@ const FriendsPage = () => {
     setSearchError("");
 
     try {
-      const response = await axios.get(`http://localhost:5000/friends/search?query=${searchQuery}`, {
+      const trimmedQuery = searchQuery.trim();
+      let searchParams = '';
+      
+      // Check if user is searching by ID (starts with #)
+      if (trimmedQuery.startsWith('#')) {
+        const idQuery = trimmedQuery.substring(1); // Remove the # symbol
+        if (idQuery && /^\d+$/.test(idQuery)) {
+          // Valid numeric ID search
+          searchParams = `query=${encodeURIComponent(idQuery)}&searchType=id`;
+        } else {
+          setSearchError("Wyszukiwanie po ID wymaga cyfr po znaku #");
+          setIsSearching(false);
+          return;
+        }
+      } else {
+        // Regular search by name or email
+        searchParams = `query=${encodeURIComponent(trimmedQuery)}`;
+      }
+
+      const response = await axios.get(`http://localhost:5000/friends/search?${searchParams}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem("token")}`
         }
@@ -118,7 +137,7 @@ const FriendsPage = () => {
       }
     } catch (error: any) {
       console.error("Error searching users:", error);
-      const errorMessage = error.response?.data?.details || 
+      const errorMessage = error.response?.data?.error || 
                            "Błąd podczas wyszukiwania użytkowników. Spróbuj ponownie później.";
       setSearchError(errorMessage);
     } finally {
@@ -325,6 +344,7 @@ const FriendsPage = () => {
                         />
                         <div>
                           <p className="font-medium">{friend.nick}</p>
+                          <p className="text-sm text-gray-400">#{friendId.toString().padStart(10, '0')}</p>
                           <p className="text-sm text-gray-400">{friend.email}</p>
                         </div>
                       </div>
@@ -368,6 +388,7 @@ const FriendsPage = () => {
                           />
                           <div>
                             <p className="font-medium">{request.Uzytkownik1.nick}</p>
+                            <p className="text-sm text-gray-400">#{request.ID_uzytkownik1.toString().padStart(10, '0')}</p>
                             <p className="text-sm text-gray-400">{request.Uzytkownik1.email}</p>
                           </div>
                         </div>
@@ -406,6 +427,7 @@ const FriendsPage = () => {
                         />
                         <div>
                           <p className="font-medium">{request.Uzytkownik2.nick}</p>
+                          <p className="text-sm text-gray-400">#{request.ID_uzytkownik2.toString().padStart(10, '0')}</p>
                           <p className="text-sm text-gray-400">{request.Uzytkownik2.email}</p>
                         </div>
                       </div>
@@ -445,7 +467,7 @@ const FriendsPage = () => {
               <div className="flex mb-4">
                 <input
                   type="text"
-                  placeholder="Wyszukaj użytkownika po nazwie lub email"
+                  placeholder="Wyszukaj użytkownika po nazwie, email lub ID (#123)"
                   value={searchQuery}
                   onChange={handleSearchChange}
                   className="flex-grow p-2 rounded-l bg-gray-700 text-white border-r-0 border-gray-600 focus:outline-none"
@@ -459,6 +481,11 @@ const FriendsPage = () => {
                 >
                   {isSearching ? "Szukam..." : "Szukaj"}
                 </button>
+              </div>
+              
+              {/* Add search hint */}
+              <div className="mb-2 text-xs text-gray-400">
+                Wskazówka: Użyj # przed numerem aby szukać po ID (np. #123). Możesz też wyszukiwać po nazwie lub emailu.
               </div>
               
               <div className="max-h-80 overflow-y-auto mt-4">
@@ -484,6 +511,7 @@ const FriendsPage = () => {
                             />
                             <div>
                               <p className="font-medium">{foundUser.nick}</p>
+                              <p className="text-sm text-gray-400">#{foundUser.ID_uzytkownik.toString().padStart(10, '0')}</p>
                               <p className="text-sm text-gray-400">{foundUser.email}</p>
                             </div>
                           </div>
