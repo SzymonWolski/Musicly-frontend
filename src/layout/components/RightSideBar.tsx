@@ -3,6 +3,7 @@ import { MessageCircle, X } from "lucide-react"
 import { useEffect, useState, useRef } from "react"
 import axios from "axios"
 import { useAuth } from "@/context/AuthContext"
+import { encryptMessage, decryptMessage, generateKeyTimestamp } from "@/utils/encryption"
 
 interface PinnedChat {
   friendId: number;
@@ -16,6 +17,7 @@ interface ChatMessage {
   content: string;
   timestamp: string;
   read: boolean;
+  keyTimestamp: number;
 }
 
 interface RightSideBarProps {
@@ -82,7 +84,25 @@ const RightSideBar = ({ initialChat }: RightSideBarProps) => {
       });
       
       if (response.data && response.data.messages) {
-        setMessages(response.data.messages);
+        // Backend should return encrypted messages - decrypt them here
+        const decryptedMessages = await Promise.all(
+          response.data.messages.map(async (msg: ChatMessage) => {
+            try {
+              // Only decrypt if the message appears to be encrypted (contains ':')
+              if (msg.content.includes(':') && msg.keyTimestamp) {
+                const decryptedContent = await decryptMessage(msg.content, msg.keyTimestamp);
+                return { ...msg, content: decryptedContent };
+              } else {
+                // Handle legacy unencrypted messages or already decrypted ones
+                return msg;
+              }
+            } catch (error) {
+              console.error("Error decrypting message:", error);
+              return { ...msg, content: '[Błąd odszyfrowywania]' };
+            }
+          })
+        );
+        setMessages(decryptedMessages);
       } else {
         setMessages([]);
       }
@@ -96,7 +116,6 @@ const RightSideBar = ({ initialChat }: RightSideBarProps) => {
 
   const checkForNewMessages = async (friendId: number) => {
     try {
-      // This would typically check for messages newer than the latest we have
       const latestMessageId = messages.length > 0 ? 
         Math.max(...messages.map(msg => msg.id)) : 0;
         
@@ -110,12 +129,27 @@ const RightSideBar = ({ initialChat }: RightSideBarProps) => {
       );
       
       if (response.data && response.data.messages && response.data.messages.length > 0) {
-        // Append new messages to our list
-        setMessages(prevMessages => [...prevMessages, ...response.data.messages]);
+        // Decrypt new messages
+        const decryptedNewMessages = await Promise.all(
+          response.data.messages.map(async (msg: ChatMessage) => {
+            try {
+              // Only decrypt if the message appears to be encrypted
+              if (msg.content.includes(':') && msg.keyTimestamp) {
+                const decryptedContent = await decryptMessage(msg.content, msg.keyTimestamp);
+                return { ...msg, content: decryptedContent };
+              } else {
+                return msg;
+              }
+            } catch (error) {
+              console.error("Error decrypting message:", error);
+              return { ...msg, content: '[Błąd odszyfrowywania]' };
+            }
+          })
+        );
+        setMessages(prevMessages => [...prevMessages, ...decryptedNewMessages]);
       }
     } catch (error) {
       console.error("Error checking for new messages:", error);
-      // Don't show error UI for background polling failures
     }
   };
 
@@ -123,12 +157,26 @@ const RightSideBar = ({ initialChat }: RightSideBarProps) => {
     if (!message.trim() || !pinnedChat) return;
 
     try {
-      // Send the message to the backend
+      // 1. Sender creates key timestamp
+      const keyTimestamp = generateKeyTimestamp();
+      
+      // 2. Sender encrypts message using the timestamp
+      const encryptedContent = await encryptMessage(message, keyTimestamp);
+
+      console.log("Sending encrypted message:", {
+        original: message,
+        encrypted: encryptedContent,
+        keyTimestamp: keyTimestamp
+      });
+
+      // 3. Send encrypted message along with timestamp to backend
+      // Backend expects: recipientId, encryptedContent, keyTimestamp
       const response = await axios.post(
         "http://localhost:5000/messages/send",
         {
           recipientId: pinnedChat.friendId,
-          content: message
+          encryptedContent: encryptedContent, // Changed from 'content' to 'encryptedContent'
+          keyTimestamp: keyTimestamp
         }, 
         {
           headers: {
@@ -138,19 +186,13 @@ const RightSideBar = ({ initialChat }: RightSideBarProps) => {
       );
 
       if (response.data && response.data.message) {
-        // Add the sent message to our local state
-        setMessages([...messages, response.data.message]);
-      } else {
-        // If backend doesn't return the message object, create a temporary one
-        const tempMessage: ChatMessage = {
-          id: Date.now(),
-          sender: userId,
-          recipient: pinnedChat.friendId,
-          content: message,
-          timestamp: new Date().toISOString(),
-          read: false
+        // Add the sent message with original content for immediate display
+        const newMessage = {
+          ...response.data.message,
+          content: message, // Show original content for sender
+          keyTimestamp: Number(response.data.message.keyTimestamp) // Ensure it's a number
         };
-        setMessages([...messages, tempMessage]);
+        setMessages(prevMessages => [...prevMessages, newMessage]);
       }
       
       setMessage("");
