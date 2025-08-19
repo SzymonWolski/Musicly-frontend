@@ -158,7 +158,7 @@ const HomePage = () => {
   const fetchUserPlaylists = async () => {
     setLoadingPlaylists(true);
     try {
-      const response = await axios.get('http://localhost:5000/playlists', {
+      const response = await axios.get('http://localhost:5000/playlists?myOnly=true', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
