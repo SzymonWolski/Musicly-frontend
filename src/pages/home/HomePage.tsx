@@ -80,6 +80,7 @@ const HomePage = () => {
   
   // Dropdown state for "Add to playlist"
   const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{top: number, right: number}>({top: 0, right: 0});
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Helper function to get song image URL with cache busting
@@ -131,9 +132,26 @@ const HomePage = () => {
       }
     };
 
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenDropdownId(null);
+      }
+    };
+
+    const handleScroll = () => {
+      setOpenDropdownId(null);
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    document.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleScroll);
+    
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+      document.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleScroll);
     };
   }, []);
 
@@ -286,11 +304,25 @@ const HomePage = () => {
   
   const toggleAddToPlaylistDropdown = (e: React.MouseEvent, songId: number) => {
     e.stopPropagation(); // Prevent triggering the song play
-    setOpenDropdownId(openDropdownId === songId ? null : songId);
+    
+    if (openDropdownId === songId) {
+      setOpenDropdownId(null);
+    } else {
+      const button = e.currentTarget as HTMLElement;
+      const rect = button.getBoundingClientRect();
+      
+      // Calculate position relative to viewport
+      const top = Math.max(10, rect.top - 8); // 260px is approximate dropdown height
+      const right = Math.max(10, window.innerWidth - rect.right);
+      
+      setDropdownPosition({ top, right });
+      setOpenDropdownId(songId);
+    }
   };
   
   const handleAddSongToPlaylist = async (e: React.MouseEvent, songId: number, playlistId: number) => {
-    e.stopPropagation(); // Prevent other actions
+    e.stopPropagation();
+    e.preventDefault();
     
     try {
       await axios.post(`http://localhost:5000/playlists/${playlistId}/songs`, {
@@ -803,14 +835,27 @@ const HomePage = () => {
                             {/* Playlist dropdown menu */}
                             {openDropdownId === song.ID_utworu && (
                               <div 
-                                className="absolute right-0 mt-1 w-56 bg-zinc-800 rounded-md shadow-lg z-10"
-                                onClick={(e) => e.stopPropagation()} // Add this line to prevent click-through
+                                className="fixed w-56 bg-zinc-800 rounded-md shadow-xl z-50 border border-zinc-600"
+                                style={{
+                                  top: `${dropdownPosition.top}px`,
+                                  right: `${dropdownPosition.right}px`,
+                                  boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.2)'
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                }}
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                }}
                               >
                                 <div className="p-2 border-b border-zinc-700 flex justify-between items-center">
                                   <span className="text-white text-sm font-medium">Dodaj do playlisty</span>
                                   <button 
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      e.preventDefault();
                                       setOpenDropdownId(null);
                                     }}
                                     className="text-gray-400 hover:text-white"
@@ -831,27 +876,22 @@ const HomePage = () => {
                                     userPlaylists.map((playlist) => (
                                       <button
                                         key={playlist.id}
-                                        onClick={(e) => handleAddSongToPlaylist(e, song.ID_utworu, playlist.id)}
-                                        className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-zinc-700 flex justify-between items-center"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          e.preventDefault();
+                                          handleAddSongToPlaylist(e, song.ID_utworu, playlist.id);
+                                        }}
+                                        onMouseDown={(e) => {
+                                          e.stopPropagation();
+                                          e.preventDefault();
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-zinc-700 flex justify-between items-center transition-colors"
                                       >
                                         <span>{playlist.name}</span>
                                         <span className="text-xs text-gray-400">{playlist.songCount} utwor{playlist.songCount === 1 ? '' : playlist.songCount < 5 ? 'y' : 'ów'}</span>
                                       </button>
                                     ))
                                   )}
-                                </div>
-                                <div className="p-2 border-t border-zinc-700">
-                                  <button 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      addToPlaylist(song);
-                                      setOpenDropdownId(null);
-                                      alert("Dodano do obecnej kolejki odtwarzania!");
-                                    }}
-                                    className="w-full text-center py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-                                  >
-                                    Dodaj do aktualnej kolejki
-                                  </button>
                                 </div>
                               </div>
                             )}
@@ -881,7 +921,7 @@ const HomePage = () => {
                             ) : (
                               // Empty heart
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                               </svg>
                             )}
                           </button>
@@ -1056,7 +1096,7 @@ const HomePage = () => {
                                 ) : (
                                   // Empty heart
                                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                                   </svg>
                                 )}
                               </button>
