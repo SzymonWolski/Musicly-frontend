@@ -83,9 +83,38 @@ const HomePage = () => {
   const [dropdownPosition, setDropdownPosition] = useState<{top: number, right: number}>({top: 0, right: 0});
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Helper function to get song image URL with cache busting
+  // Add new state for image cache timestamps
+  const [imageTimestamps, setImageTimestamps] = useState<{[key: number]: number}>({});
+  
+  // Modified function that uses stored timestamps instead of creating new ones on every render
   const getSongImageUrl = (songId: number) => {
-    return `http://localhost:5000/files/image/${songId}?t=${Date.now()}`;
+    return `http://localhost:5000/files/image/${songId}`;
+  };
+  
+  // Function to refresh all images
+  const refreshAllSongImages = () => {
+    const newTimestamps: {[key: number]: number} = {};
+    const currentTime = Date.now();
+    
+    allSongs.forEach(song => {
+      newTimestamps[song.ID_utworu] = currentTime;
+    });
+    
+    setImageTimestamps(newTimestamps);
+  };
+
+  // Modified refresh function that also updates images
+  const handleRefreshSongs = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshSongs();
+      // Update image timestamps after songs are refreshed
+      setTimeout(refreshAllSongImages, 300); // Small delay to ensure songs are loaded
+    } catch (error) {
+      console.error("Error refreshing songs:", error);
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   // Helper function to render song image with error handling
@@ -449,18 +478,6 @@ const HomePage = () => {
     // Start playback with the first song
     if (playlistSongs.length > 0) {
       playSong(playlistSongs[0], 'playlist');
-    }
-  };
-
-  // Dodaj funkcję do ręcznego odświeżania
-  const handleRefreshSongs = async () => {
-    setIsRefreshing(true);
-    try {
-      await refreshSongs();
-    } catch (error) {
-      console.error("Error refreshing songs:", error);
-    } finally {
-      setIsRefreshing(false);
     }
   };
 
