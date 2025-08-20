@@ -114,16 +114,17 @@ const LeftSidebar = () => {
     return <Volume2 size={14} />;
   };
 
-  // Modified to handle playlist song click with explicit source
+  // Modified to handle playlist song click
   const handlePlaylistSongClick = (song: Song) => {
     console.log("Playing from queue:", song.nazwa_utworu);
-    playSong(song, 'playlist');
+    playSong(song, false); // Don't clear the queue, just play this song
   };
 
-  // Modified to handle favorites song click with explicit source
+  // Modified to handle favorites song click - add all favorites to queue
   const handleFavoriteSongClick = (song: Song) => {
     console.log("Playing from favorites:", song.nazwa_utworu);
-    playSong(song, 'favorites');
+    // Play this song and use all favorites as the playlist
+    playSong(song, true, favoriteDetails);
   };
 
   return (

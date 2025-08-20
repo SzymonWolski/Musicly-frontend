@@ -2,8 +2,7 @@ import { createContext, useContext, useState, useEffect, useRef, ReactNode } fro
 import axios from 'axios';
 import { useAuth } from './AuthContext';
 
-// Define playback source types
-export type PlaybackSource = 'playlist' | 'favorites' | 'single';
+// Remove PlaybackSource type
 
 interface Song {
   ID_utworu: number;
@@ -28,18 +27,18 @@ interface AudioPlayerContextType {
   allSongs: Song[]; // New property for all available songs
   favoriteSongs: number[];
   favoriteDetails: Song[];
-  currentPlaybackSource: PlaybackSource;
-  playSong: (song: Song, source?: PlaybackSource) => Promise<void>;
+  // Remove currentPlaybackSource
+  playSong: (song: Song, clearQueue?: boolean, playlistSongs?: Song[]) => Promise<void>;
   addToPlaylist: (song: Song) => void;
-  removeFromPlaylist: (songId: number) => void; // New function to remove songs from playlist
-  clearPlaylist: () => void; // New function to clear the queue
+  removeFromPlaylist: (songId: number) => void;
+  clearPlaylist: () => void;
   togglePlayPause: () => void;
   seekTo: (time: number) => void;
   setVolume: (volume: number) => void;
   toggleLoop: () => void;
   toggleFavorite: (songId: number) => Promise<void>;
-  currentSongIndex: number; // Index of the current song in the playlist
-  refreshSongs: () => Promise<void>; // Dodaj tę linię
+  currentSongIndex: number;
+  refreshSongs: () => Promise<void>;
 }
 
 const AudioPlayerContext = createContext<AudioPlayerContextType | undefined>(undefined);
@@ -56,7 +55,7 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
   const [allSongs, setAllSongs] = useState<Song[]>([]);
   const [favoriteSongs, setFavoriteSongs] = useState<number[]>([]);
   const [favoriteDetails, setFavoriteDetails] = useState<Song[]>([]);
-  const [currentPlaybackSource, setCurrentPlaybackSource] = useState<PlaybackSource>('single');
+  // Remove currentPlaybackSource state
   const [currentSongIndex, setCurrentSongIndex] = useState<number>(-1);
   const animationRef = useRef<number | null>(null);
 
@@ -216,37 +215,131 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // Add the missing handleEnded function
+  // Modified handleEnded function to properly handle queue playback
   const handleEnded = () => {
-    if (!isLooping) {
-      // Play next song based on current source if not looping
-      if (currentPlaybackSource !== 'single' && currentSong) {
-        playNextSong();
-      } else {
-        setIsPlaying(false);
+    console.log("Track ended. Loop:", isLooping, "Current index:", currentSongIndex, "Playlist length:", playlist.length);
+    
+    // Najpierw sprawdźmy, czy mamy playlistę z localStorage, jeśli nasza jest pusta
+    if (playlist.length === 0) {
+      try {
+        const savedPlaylist = localStorage.getItem('musiclyPlaylist');
+        if (savedPlaylist) {
+          const parsedPlaylist = JSON.parse(savedPlaylist);
+          if (Array.isArray(parsedPlaylist) && parsedPlaylist.length > 0) {
+            console.log("Restoring playlist from localStorage during handleEnded");
+            setPlaylist(parsedPlaylist);
+            
+            // Jeśli mamy currentSong, znajdźmy jego indeks
+            if (currentSong) {
+              const songIndex = parsedPlaylist.findIndex(s => s.ID_utworu === currentSong.ID_utworu);
+              if (songIndex !== -1) {
+                setCurrentSongIndex(songIndex);
+                
+                // Sprawdźmy, czy jest następna piosenka
+                if (songIndex < parsedPlaylist.length - 1) {
+                  const nextSong = parsedPlaylist[songIndex + 1];
+                  setTimeout(() => {
+                    playSong(nextSong, false);
+                  }, 100);
+                  return;
+                }
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to restore playlist in handleEnded:", error);
       }
     }
-    // If looping is enabled, the audio element will loop automatically due to the loop property
+    
+    if (isLooping) {
+      console.log("Looping enabled - audio element will handle this automatically");
+      return; // Audio element obsługuje zapętlenie automatycznie
+    }
+
+    // Szukanie następnego utworu w kolejce
+    if (playlist.length === 0) {
+      console.log("Queue is empty, nothing to play next");
+      return;
+    }
+
+    // Znajdź aktualny indeks piosenki w kolejce
+    let currentIndex = currentSongIndex;
+    
+    // Jeśli z jakiegoś powodu indeks jest niepoprawny, spróbuj go znaleźć na podstawie ID utworu
+    if (currentIndex < 0 || currentIndex >= playlist.length) {
+      console.log("Current index is invalid, trying to find by song ID");
+      if (currentSong) {
+        currentIndex = playlist.findIndex(song => song.ID_utworu === currentSong.ID_utworu);
+        console.log("Found index by song ID:", currentIndex);
+        
+        // Od razu zaktualizuj stan, żeby mieć poprawny indeks
+        if (currentIndex !== -1) {
+          setCurrentSongIndex(currentIndex);
+        } else {
+          console.log("Could not find song in playlist, setting index to 0");
+          setCurrentSongIndex(0);
+          currentIndex = 0;
+        }
+      }
+    }
+
+    // Sprawdź czy jest następny utwór w kolejce
+    if (currentIndex >= 0 && currentIndex < playlist.length - 1) {
+      const nextIndex = currentIndex + 1;
+      const nextSong = playlist[nextIndex];
+      
+      console.log("Playing next song at index:", nextIndex, "Song:", nextSong.nazwa_utworu);
+      
+      // Zaktualizuj indeks przed odtworzeniem, żeby zachować synchronizację
+      setCurrentSongIndex(nextIndex);
+      
+      // Odtwórz następny utwór bez czyszczenia kolejki
+      if (nextSong) {
+        // Użyj setTimeout, żeby dać czas na zaktualizowanie stanu
+        setTimeout(() => {
+          playSong(nextSong, false)
+            .then(() => console.log("Next song started successfully"))
+            .catch(err => console.error("Failed to start next song:", err));
+        }, 50);
+      }
+    } else {
+      console.log("Reached the end of queue, stopping playback");
+      setIsPlaying(false);
+    }
   };
 
-  // New function to play the next song based on current source
-  const playNextSong = () => {
-    if (!currentSong) return;
+  // Dodatkowy mechanizm wykrywania zakończenia utworu
+  useEffect(() => {
+    if (!isPlaying || !audioRef.current || isLooping) return;
     
-    const sourceList = 
-      currentPlaybackSource === 'favorites' ? favoriteDetails : 
-      currentPlaybackSource === 'playlist' ? playlist : 
-      [];
-    
-    if (sourceList.length > 0) {
-      const currentIndex = sourceList.findIndex(song => song.ID_utworu === currentSong.ID_utworu);
-      if (currentIndex !== -1 && currentIndex < sourceList.length - 1) {
-        const nextSong = sourceList[currentIndex + 1];
-        playSong(nextSong, currentPlaybackSource);
-      } else {
-        // We're at the end of the list
-        setIsPlaying(false);
+    // Sprawdzaj co sekundę, czy utwór się nie zakończył
+    const checkEndInterval = setInterval(() => {
+      if (audioRef.current && 
+          audioRef.current.duration > 0 && 
+          audioRef.current.currentTime > 0 && 
+          audioRef.current.currentTime >= audioRef.current.duration - 0.5) {
+        console.log("Track ending detected by interval check");
+        // Czyścimy interwał przed wywołaniem handleEnded, aby uniknąć wielokrotnego wywołania
+        clearInterval(checkEndInterval);
+        handleEnded();
       }
+    }, 1000);
+    
+    return () => clearInterval(checkEndInterval);
+  }, [isPlaying, currentSong, isLooping, playlist, currentSongIndex]);
+
+  // Simplified playNextSong function
+  const playNextSong = () => {
+    if (!currentSong || playlist.length === 0) return;
+    
+    const currentIndex = playlist.findIndex(song => song.ID_utworu === currentSong.ID_utworu);
+    if (currentIndex !== -1 && currentIndex < playlist.length - 1) {
+      const nextSong = playlist[currentIndex + 1];
+      playSong(nextSong, false); // Don't clear queue when playing next song
+    } else {
+      // We're at the end of the list
+      setIsPlaying(false);
     }
   };
 
@@ -327,16 +420,64 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     setCurrentSongIndex(-1);
   };
 
-  // Enhanced playSong with source parameter
-  const playSong = async (song: Song, source: PlaybackSource = 'single') => {
+  // Monitorowanie zmian w playliście
+  useEffect(() => {
+    console.log("Playlist state changed:", {
+      length: playlist.length,
+      currentIndex: currentSongIndex,
+      songs: playlist.map(s => s.nazwa_utworu)
+    });
+  }, [playlist, currentSongIndex]);
+
+  // Utrwalanie playlisty w localStorage i przywracanie po restarcie
+  useEffect(() => {
+    // Zapisz playlistę i currentSongIndex do localStorage gdy się zmienią
+    if (playlist && playlist.length > 0) {
+      try {
+        localStorage.setItem('musiclyPlaylist', JSON.stringify(playlist));
+        localStorage.setItem('musiclyCurrentSongIndex', currentSongIndex.toString());
+        console.log("Saved playlist to localStorage, length:", playlist.length, "index:", currentSongIndex);
+      } catch (error) {
+        console.error("Failed to save playlist to localStorage:", error);
+      }
+    }
+  }, [playlist, currentSongIndex]);
+
+  // Wczytywanie playlisty z localStorage przy starcie
+  useEffect(() => {
+    if (token && playlist.length === 0) {
+      try {
+        const savedPlaylist = localStorage.getItem('musiclyPlaylist');
+        const savedIndex = localStorage.getItem('musiclyCurrentSongIndex');
+        
+        if (savedPlaylist) {
+          const parsedPlaylist = JSON.parse(savedPlaylist);
+          if (Array.isArray(parsedPlaylist) && parsedPlaylist.length > 0) {
+            console.log("Restored playlist from localStorage, length:", parsedPlaylist.length);
+            setPlaylist(parsedPlaylist);
+            
+            if (savedIndex && !isNaN(Number(savedIndex))) {
+              const indexNum = Number(savedIndex);
+              if (indexNum >= 0 && indexNum < parsedPlaylist.length) {
+                setCurrentSongIndex(indexNum);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to restore playlist from localStorage:", error);
+      }
+    }
+  }, [token]);
+
+
+  // Zabezpieczenie funkcji playSong przed utratą playlisty
+  const playSong = async (song: Song, clearQueue: boolean = true, playlistSongs?: Song[]) => {
     // Prevent multiple rapid calls for the same song
     if (isLoadingSongRef.current) {
       console.log("Already loading a song, please wait...");
       return;
     }
-    
-    // Set the current playback source
-    setCurrentPlaybackSource(source);
     
     // If it's the same song that's already playing, just resume playback
     if (currentSong && song.ID_utworu === currentSong.ID_utworu && audioRef.current) {
@@ -358,7 +499,66 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
         }
       });
       
+      // Set current song
       setCurrentSong(song);
+
+      // Kopia playlisty do pracy, aby uniknąć problemów z asynchronicznością
+      let newPlaylist: Song[] = [...playlist];
+      let newIndex: number = currentSongIndex;
+
+      // Update playlist based on parameters
+      if (playlistSongs && playlistSongs.length > 0) {
+        console.log("[playSong] Adding all playlist songs to queue:", playlistSongs.length);
+        newPlaylist = [...playlistSongs]; // Użyj kopii, aby uniknąć referencji
+        
+        // Find index of the current song in the playlist
+        const songIndex = playlistSongs.findIndex(s => s.ID_utworu === song.ID_utworu);
+        newIndex = songIndex !== -1 ? songIndex : 0;
+        
+        console.log("[playSong] Setting current song index to:", newIndex, "in playlist of length:", newPlaylist.length);
+      } else if (clearQueue) {
+        // Clear the queue and add only this song
+        console.log("[playSong] Clearing queue and adding single song");
+        newPlaylist = [song];
+        newIndex = 0;
+      } else if (!playlist.some(s => s.ID_utworu === song.ID_utworu)) {
+        // If song is not in the current playlist, add it to the end
+        console.log("[playSong] Adding song to existing queue");
+        newPlaylist = [...playlist, song];
+        
+        // Also update the current song index
+        newIndex = playlist.length; // Index will be the current length (since we're adding to the end)
+        console.log("[playSong] Setting current song index to:", newIndex, "in playlist of length:", newPlaylist.length);
+      } else {
+        // Song is already in playlist, just update the current index
+        const existingIndex = playlist.findIndex(s => s.ID_utworu === song.ID_utworu);
+        if (existingIndex !== -1) {
+          newIndex = existingIndex;
+          console.log("[playSong] Song already in queue, updating index to:", newIndex);
+        }
+      }
+
+      // Zabezpieczenie przed niepoprawną playlistą
+      if (newPlaylist.length === 0) {
+        console.warn("[playSong] Playlist is empty after updates, adding current song");
+        newPlaylist = [song];
+        newIndex = 0;
+      }
+
+      // Zaktualizuj stan playlisty i indeksu - używamy ustawionych wartości
+      setPlaylist(newPlaylist);
+      setCurrentSongIndex(newIndex);
+      
+      // Zapisz playlistę do localStorage od razu, aby uniknąć jej utraty
+      try {
+        localStorage.setItem('musiclyPlaylist', JSON.stringify(newPlaylist));
+        localStorage.setItem('musiclyCurrentSongIndex', newIndex.toString());
+      } catch (error) {
+        console.error("[playSong] Failed to save playlist to localStorage:", error);
+      }
+      
+      // Logujemy aktualny stan zaraz po jego ustawieniu
+      console.log("[playSong] After update - playlist:", newPlaylist.length, "songs, current index:", newIndex);
 
       // Completely stop any existing audio
       if (audioRef.current) {
@@ -392,7 +592,13 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
         audioRef.current.addEventListener('timeupdate', handleTimeUpdate);
         audioRef.current.addEventListener('loadedmetadata', handleLoadedMetadata);
         audioRef.current.addEventListener('durationchange', handleDurationChange);
-        audioRef.current.addEventListener('ended', handleEnded);
+        
+        // Explicitly add the ended event with log
+        audioRef.current.addEventListener('ended', () => {
+          console.log("Audio 'ended' event triggered");
+          handleEnded();
+        });
+        
         audioRef.current.addEventListener('play', () => setIsPlaying(true));
         audioRef.current.addEventListener('pause', () => setIsPlaying(false));
         audioRef.current.addEventListener('error', handleAudioError);
@@ -553,35 +759,7 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     />
   );
 
-  // Add event listener to handle song ending
-  useEffect(() => {
-    const audioElement = audioRef.current;
-    
-    const handleSongEnd = () => {
-      // When current song ends, play the next one if available
-      if (currentSongIndex < playlist.length - 1) {
-        const nextSong = playlist[currentSongIndex + 1];
-        setCurrentSongIndex(currentSongIndex + 1);
-        playSong(nextSong, 'playlist');
-      } else {
-        // End of playlist reached
-        setCurrentSong(null);
-        setIsPlaying(false);
-      }
-    };
-
-    if (audioElement) {
-      audioElement.addEventListener('ended', handleSongEnd);
-    }
-
-    return () => {
-      if (audioElement) {
-        audioElement.removeEventListener('ended', handleSongEnd);
-      }
-    };
-  }, [currentSongIndex, playlist]);
-
-  // Dodaj tę funkcję
+  // Refresh songs function
   const refreshSongs = async () => {
     try {
       const response = await axios.get("http://localhost:5000/files/list", {
@@ -615,7 +793,7 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
         allSongs,
         favoriteSongs,
         favoriteDetails,
-        currentPlaybackSource,
+        // Remove currentPlaybackSource
         playSong,
         addToPlaylist,
         removeFromPlaylist,
@@ -626,7 +804,7 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
         toggleLoop,
         toggleFavorite,
         currentSongIndex,
-        refreshSongs, // Dodaj tę linię
+        refreshSongs,
       }}
     >
       {audioElement}

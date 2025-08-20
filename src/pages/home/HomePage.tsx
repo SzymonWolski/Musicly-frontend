@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useAudioPlayer } from "@/context/AudioPlayerContext";
 import { useAuth } from "@/context/AuthContext";
-import { Plus, Search, Music, ListMusic, X, RefreshCw, Heart } from "lucide-react"; // Dodaj Heart
+import { Plus, Search, Music, ListMusic, X, RefreshCw, Heart } from "lucide-react";
 import axios from "axios";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -23,8 +23,8 @@ interface Playlist {
   songCount: number;
   imageFilename?: string;
   createdBy: string;
-  isFavorite?: boolean; // Dodaj pole isFavorite
-  likesCount?: number; // Dodaj pole likesCount
+  isFavorite?: boolean;
+  likesCount?: number;
 }
 
 const HomePage = () => {
@@ -316,14 +316,33 @@ const HomePage = () => {
     }
   };
   
+  // Modified to play a single song from the homepage
   const handlePlayThisSong = async (song: Song) => {
     setAudioLoading(true);
     setAudioError("");
     
     try {
-      // Explicitly set source as 'single' for homepage playback
-      await playSong(song, 'single');
-      console.log("Playing single song from homepage");
+      // Play this song, clearing any existing queue and starting a new one with just this song
+      await playSong(song, true);
+      console.log("Playing song from homepage, creating new queue");
+    } catch (error) {
+      setAudioError("Nie można załadować pliku audio. Spróbuj ponownie później.");
+    } finally {
+      setAudioLoading(false);
+    }
+  };
+
+  // Ulepszona implementacja funkcji handlePlaySongFromPlaylist
+  const handlePlaySongFromPlaylist = async (song: Song) => {
+    if (!selectedPlaylist || playlistSongs.length === 0) return;
+    
+    setAudioLoading(true);
+    setAudioError("");
+    
+    try {
+      // Wyraźnie przekaż wszystkie piosenki z playlisty jako kolejkę odtwarzania
+      await playSong(song, true, playlistSongs);
+      console.log("Playing song from playlist, loading all playlist songs to queue");
     } catch (error) {
       setAudioError("Nie można załadować pliku audio. Spróbuj ponownie później.");
     } finally {
@@ -463,21 +482,23 @@ const HomePage = () => {
     }
   };
 
-  // Handle playing all songs in a playlist
+  // Ulepszona funkcja odtwarzania wszystkich piosenek
   const handlePlayAllSongs = () => {
     if (!selectedPlaylist || playlistSongs.length === 0) return;
     
-    // First clear the current playlist/queue
-    clearPlaylist();
+    setAudioLoading(true);
+    setAudioError("");
     
-    // Add all songs to the queue
-    playlistSongs.forEach(song => {
-      addToPlaylist(song);
-    });
-    
-    // Start playback with the first song
-    if (playlistSongs.length > 0) {
-      playSong(playlistSongs[0], 'playlist');
+    try {
+      // Zacznij od pierwszej piosenki w playliście i dodaj wszystkie pozostałe do kolejki
+      if (playlistSongs.length > 0) {
+        playSong(playlistSongs[0], true, playlistSongs);
+        console.log("Playing all songs from playlist");
+      }
+    } catch (error) {
+      setAudioError("Nie można załadować pliku audio. Spróbuj ponownie później.");
+    } finally {
+      setAudioLoading(false);
     }
   };
 
@@ -1062,7 +1083,7 @@ const HomePage = () => {
                           className={`px-4 py-3 hover:bg-gray-700 hover:bg-opacity-50 cursor-pointer transition ${
                             currentSong?.ID_utworu === song.ID_utworu ? 'bg-gray-700 bg-opacity-50' : ''
                           }`}
-                          onClick={() => handlePlayThisSong(song)}
+                          onClick={() => handlePlaySongFromPlaylist(song)} // Updated to use the new handler
                         >
                           <div className="flex justify-between items-center">
                             <div className="flex items-center space-x-3">
