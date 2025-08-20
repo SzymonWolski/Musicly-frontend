@@ -39,8 +39,6 @@ const HomePage = () => {
     allSongs,
     favoriteSongs,
     playSong,
-    addToPlaylist,
-    clearPlaylist,
     togglePlayPause,
     seekTo,
     setVolume,

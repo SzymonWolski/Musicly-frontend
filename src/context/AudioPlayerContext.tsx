@@ -329,20 +329,6 @@ export const AudioPlayerProvider = ({ children }: { children: ReactNode }) => {
     return () => clearInterval(checkEndInterval);
   }, [isPlaying, currentSong, isLooping, playlist, currentSongIndex]);
 
-  // Simplified playNextSong function
-  const playNextSong = () => {
-    if (!currentSong || playlist.length === 0) return;
-    
-    const currentIndex = playlist.findIndex(song => song.ID_utworu === currentSong.ID_utworu);
-    if (currentIndex !== -1 && currentIndex < playlist.length - 1) {
-      const nextSong = playlist[currentIndex + 1];
-      playSong(nextSong, false); // Don't clear queue when playing next song
-    } else {
-      // We're at the end of the list
-      setIsPlaying(false);
-    }
-  };
-
   // API functions
   const fetchFavorites = async () => {
     if (!token) {
