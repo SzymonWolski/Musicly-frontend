@@ -62,8 +62,9 @@ const HomePage = () => {
   // Tab navigation state
   const [activeTab, setActiveTab] = useState<'songs' | 'playlists'>('songs');
   
-  // Playlists state
-  const [userPlaylists, setUserPlaylists] = useState<Playlist[]>([]);
+  // Playlists state - renamed variables for clarity
+  const [allPlaylists, setAllPlaylists] = useState<Playlist[]>([]);
+  const [userPlaylists, setUserPlaylists] = useState<Playlist[]>([]); // New state for user's own playlists
   const [loadingPlaylists, setLoadingPlaylists] = useState(false);
   const [filteredPlaylists, setFilteredPlaylists] = useState<Playlist[]>([]);
   
@@ -87,6 +88,26 @@ const HomePage = () => {
   // Modified function that uses stored timestamps instead of creating new ones on every render
   const getSongImageUrl = (songId: number) => {
     return `http://localhost:5000/files/image/${songId}`;
+  };
+
+  // Function to fetch playlist image
+  const fetchPlaylistImage = async (playlistId: number) => {
+    try {
+      const response = await axios.get(`http://localhost:5000/playlists/${playlistId}/image`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        responseType: 'blob'
+      });
+      
+      const imageUrl = URL.createObjectURL(response.data);
+      setPlaylistImages(prev => ({
+        ...prev,
+        [playlistId]: imageUrl
+      }));
+    } catch (error) {
+      console.error(`Error fetching image for playlist ${playlistId}:`, error);
+    }
   };
   
   // Function to refresh all images
@@ -144,9 +165,10 @@ const HomePage = () => {
     setLoading(false);
   }, [allSongs]);
 
-  // Fetch user playlists
+  // Fetch all playlists for display and user playlists for dropdown
   useEffect(() => {
     if (token) {
+      fetchAllPlaylists();
       fetchUserPlaylists();
     }
   }, [token]);
@@ -182,10 +204,11 @@ const HomePage = () => {
     };
   }, []);
 
-  const fetchUserPlaylists = async () => {
+  const fetchAllPlaylists = async () => {
     setLoadingPlaylists(true);
     try {
-      const response = await axios.get('http://localhost:5000/playlists?myOnly=true', {
+      // Removed myOnly=true parameter to fetch all playlists
+      const response = await axios.get('http://localhost:5000/playlists', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -199,7 +222,7 @@ const HomePage = () => {
           isFavorite: playlist.isFavorite || false
         }));
         
-        setUserPlaylists(playlistsWithCorrectNaming);
+        setAllPlaylists(playlistsWithCorrectNaming);
         setFilteredPlaylists(playlistsWithCorrectNaming);
         
         // Fetch images for playlists that have them
@@ -216,27 +239,26 @@ const HomePage = () => {
     }
   };
 
-  // Function to fetch playlist image - POPRAWKA
-  const fetchPlaylistImage = async (playlistId: number): Promise<void> => {
+  // Function to fetch only user's playlists for the "Add to playlist" dropdown
+  const fetchUserPlaylists = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/playlists/${playlistId}/image`, {
+      const response = await axios.get('http://localhost:5000/playlists?myOnly=true', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
       
-      if (response.ok) {
-        const blob = await response.blob();
-        const imageUrl = URL.createObjectURL(blob);
-        setPlaylistImages(prev => ({
-          ...prev,
-          [playlistId]: imageUrl
+      if (response.data && Array.isArray(response.data.playlists)) {
+        const userOwnedPlaylists = response.data.playlists.map((playlist: any) => ({
+          ...playlist,
+          likesCount: playlist.likeCount,
+          isFavorite: playlist.isFavorite || false
         }));
-      } else {
-        console.warn(`Failed to fetch image for playlist ${playlistId}:`, response.status);
+        
+        setUserPlaylists(userOwnedPlaylists);
       }
     } catch (error) {
-      console.error(`Error fetching playlist image for ${playlistId}:`, error);
+      console.error('Error fetching user playlists:', error);
     }
   };
 
@@ -272,7 +294,7 @@ const HomePage = () => {
     // Reset to original lists if search query is cleared
     if (e.target.value === "") {
       setSongs(allSongs);
-      setFilteredPlaylists(userPlaylists);
+      setFilteredPlaylists(allPlaylists);
       setIsSearchResults(false);
     }
   };
@@ -280,7 +302,7 @@ const HomePage = () => {
   const handleSearch = () => {
     if (!searchQuery.trim()) {
       setSongs(allSongs);
-      setFilteredPlaylists(userPlaylists);
+      setFilteredPlaylists(allPlaylists);
       setIsSearchResults(false);
       return;
     }
@@ -297,7 +319,7 @@ const HomePage = () => {
       setSongs(filteredResults);
     } else {
       // Filter playlists locally based on search query
-      const filteredResults = userPlaylists.filter(playlist => 
+      const filteredResults = allPlaylists.filter(playlist => 
         playlist.name.toLowerCase().includes(searchQuery.toLowerCase())
       );
       
@@ -400,7 +422,7 @@ const HomePage = () => {
     if (tab === 'songs') {
       setSongs(allSongs);
     } else {
-      setFilteredPlaylists(userPlaylists);
+      setFilteredPlaylists(allPlaylists);
     }
   };
 
@@ -458,7 +480,7 @@ const HomePage = () => {
         });
         
         // Also update in the playlists list
-        setUserPlaylists(prevPlaylists => 
+        setAllPlaylists(prevPlaylists => 
           prevPlaylists.map(playlist => 
             playlist.id === selectedPlaylist.id 
               ? { ...playlist, songCount: playlist.songCount - 1 }
@@ -505,7 +527,7 @@ const HomePage = () => {
     if (e) e.stopPropagation(); // Prevent opening playlist when clicking favorite button
     
     try {
-      const playlist = userPlaylists.find(p => p.id === playlistId) || selectedPlaylist;
+      const playlist = allPlaylists.find(p => p.id === playlistId) || selectedPlaylist;
       if (!playlist) return;
       
       let newIsFavorite = false;
@@ -538,7 +560,7 @@ const HomePage = () => {
             }
           : playlist;
       
-      setUserPlaylists(prev => prev.map(updatePlaylist));
+      setAllPlaylists(prev => prev.map(updatePlaylist));
       setFilteredPlaylists(prev => prev.map(updatePlaylist));
       
       if (selectedPlaylist?.id === playlistId) {
@@ -564,7 +586,7 @@ const HomePage = () => {
               const updateWithServerData = (playlist: Playlist) => 
                 playlist.id === playlistId ? playlistWithCorrectNaming : playlist;
               
-              setUserPlaylists(prev => prev.map(updateWithServerData));
+              setAllPlaylists(prev => prev.map(updateWithServerData));
               setFilteredPlaylists(prev => prev.map(updateWithServerData));
               
               if (selectedPlaylist?.id === playlistId) {
@@ -906,7 +928,7 @@ const HomePage = () => {
                                     </div>
                                   ) : userPlaylists.length === 0 ? (
                                     <div className="py-2 px-4 text-sm text-gray-400">
-                                      Brak dostępnych playlist
+                                      Nie masz żadnych playlist
                                     </div>
                                   ) : (
                                     userPlaylists.map((playlist) => (
@@ -1172,7 +1194,7 @@ const HomePage = () => {
                     ) : (
                       <>
                         <p>Brak dostępnych playlist</p>
-                        <p className="text-sm mt-2">Playlisty użytkowników pojawią się tutaj</p>
+                        <p className="text-sm mt-2">Nie znaleziono żadnych playlist w systemie</p>
                       </>
                     )}
                   </div>
