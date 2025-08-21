@@ -604,6 +604,30 @@ const HomePage = () => {
     }
   };
 
+  // Add this state for the current player image
+  const [currentSongImage, setCurrentSongImage] = useState<string | null>(null);
+
+  // Add this effect to update the image whenever currentSong changes
+  useEffect(() => {
+    if (currentSong) {
+      // Reset image state to trigger loading spinner
+      setCurrentSongImage(null);
+      
+      // Create a new Image object to preload
+      const img = new Image();
+      img.onload = () => {
+        // On successful load, set the image URL
+        setCurrentSongImage(`http://localhost:5000/files/image/${currentSong.ID_utworu}`);
+      };
+      img.onerror = () => {
+        // On error, set to null to show music note fallback
+        setCurrentSongImage(null);
+      };
+      // Start loading the image
+      img.src = `http://localhost:5000/files/image/${currentSong.ID_utworu}`;
+    }
+  }, [currentSong]);
+
   return (
     <div className="flex flex-col h-full rounded-lg" 
       style={{
@@ -625,25 +649,30 @@ const HomePage = () => {
               <div className="flex flex-col">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center space-x-4 w-full">
-                    {/* Song Image in Player with cache busting */}
+                    {/* Song Image in Player with reliable loading */}
                     <div className="w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-gray-700">
-                      <img
-                        src={getSongImageUrl(currentSong.ID_utworu)}
-                        alt={`Okładka ${currentSong.nazwa_utworu}`}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          // Replace with music note icon on error
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          target.parentElement!.innerHTML = `
-                            <div class="w-full h-full flex items-center justify-center bg-gray-600">
-                              <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                      {currentSongImage ? (
+                        <img
+                          src={currentSongImage}
+                          alt={`Okładka ${currentSong.nazwa_utworu}`}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-gray-600">
+                          {currentSong && (
+                            <>
+                              {/* Show loading spinner briefly while image loads */}
+                              <div className="absolute">
+                                <div className="animate-spin h-8 w-8 border-2 border-blue-500 rounded-full border-t-transparent"></div>
+                              </div>
+                              {/* Show music note icon as fallback */}
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-gray-400 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
                               </svg>
-                            </div>
-                          `;
-                        }}
-                      />
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
                     
                     {/* Song Info */}
