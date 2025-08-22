@@ -53,7 +53,6 @@ const HomePage = () => {
   const [isSearchResults, setIsSearchResults] = useState(false);
   const [songs, setSongs] = useState<Song[]>(allSongs);
   const [loading, setLoading] = useState(true);
-  const [error] = useState("");
   const [isVolumeVisible, setIsVolumeVisible] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
   const [audioError, setAudioError] = useState("");
@@ -82,10 +81,7 @@ const HomePage = () => {
   const [dropdownPosition, setDropdownPosition] = useState<{top: number, right: number}>({top: 0, right: 0});
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Add new state for image cache timestamps
-  const [imageTimestamps, setImageTimestamps] = useState<{[key: number]: number}>({});
-  
-  // Modified function that uses stored timestamps instead of creating new ones on every render
+  // Modified function to return song image URL
   const getSongImageUrl = (songId: number) => {
     return `http://localhost:5000/files/image/${songId}`;
   };
@@ -110,16 +106,11 @@ const HomePage = () => {
     }
   };
   
-  // Function to refresh all images
+  // Function to refresh all images - simplified since we don't use timestamps
   const refreshAllSongImages = () => {
-    const newTimestamps: {[key: number]: number} = {};
-    const currentTime = Date.now();
-    
-    allSongs.forEach(song => {
-      newTimestamps[song.ID_utworu] = currentTime;
-    });
-    
-    setImageTimestamps(newTimestamps);
+    // Implementation simplified - no need to track timestamps
+    console.log("Refreshing song images");
+    // Force re-render to refresh images if needed
   };
 
   // Modified refresh function that also updates images
@@ -127,7 +118,7 @@ const HomePage = () => {
     setIsRefreshing(true);
     try {
       await refreshSongs();
-      // Update image timestamps after songs are refreshed
+      // Update images after songs are refreshed
       setTimeout(refreshAllSongImages, 300); // Small delay to ensure songs are loaded
     } catch (error) {
       console.error("Error refreshing songs:", error);
@@ -661,13 +652,9 @@ const HomePage = () => {
                         <div className="w-full h-full flex items-center justify-center bg-gray-600">
                           {currentSong && (
                             <>
-                              {/* Show loading spinner briefly while image loads */}
-                              <div className="absolute">
-                                <div className="animate-spin h-8 w-8 border-2 border-blue-500 rounded-full border-t-transparent"></div>
-                              </div>
                               {/* Show music note icon as fallback */}
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-gray-400 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
                               </svg>
                             </>
                           )}
@@ -879,8 +866,6 @@ const HomePage = () => {
               <div className="flex justify-center items-center h-40">
                 <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
               </div>
-            ) : error ? (
-              <div className="text-center text-red-500 p-4">{error}</div>
             ) : songs.length === 0 ? (
               <div className="text-center text-gray-400 p-4">
                 {isSearchResults ? "Nie znaleziono pasujących piosenek" : "Brak dostępnych piosenek"}
