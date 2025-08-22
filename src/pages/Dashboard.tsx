@@ -534,7 +534,7 @@ const Dashboard = () => {
         ...song,
         likes_count: song.likes_count || 0
       };
-      await playSong(songWithLikes, 'single');
+      await playSong(songWithLikes);
     } catch (error) {
       console.error('Error playing song:', error);
       alert('Nie można załadować utworu. Spróbuj ponownie.');
