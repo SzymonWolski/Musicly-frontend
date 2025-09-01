@@ -23,11 +23,10 @@ interface AudioPlayerContextType {
   duration: number;
   volume: number;
   isLooping: boolean;
-  playlist: Song[]; // This is now specifically the playback queue
-  allSongs: Song[]; // New property for all available songs
+  playlist: Song[];
+  allSongs: Song[];
   favoriteSongs: number[];
   favoriteDetails: Song[];
-  // Remove currentPlaybackSource
   playSong: (song: Song, clearQueue?: boolean, playlistSongs?: Song[]) => Promise<void>;
   addToPlaylist: (song: Song) => void;
   removeFromPlaylist: (songId: number) => void;

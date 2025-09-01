@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useAudioPlayer } from "@/context/AudioPlayerContext";
 import { useAuth } from "@/context/AuthContext";
-import { Plus, Search, Music, ListMusic, X, RefreshCw, Heart } from "lucide-react";
+import { Plus, Search, Music, ListMusic, X, RefreshCw, Heart, LogIn } from "lucide-react";
 import axios from "axios";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -28,7 +28,7 @@ interface Playlist {
 }
 
 const HomePage = () => {
-  const { token } = useAuth();
+  const { token, isAuthenticated } = useAuth();
   const {
     currentSong,
     isPlaying,
@@ -89,10 +89,8 @@ const HomePage = () => {
   // Function to fetch playlist image
   const fetchPlaylistImage = async (playlistId: number) => {
     try {
+      // No need for authentication headers - images are public
       const response = await axios.get(`http://localhost:5000/playlists/${playlistId}/image`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
         responseType: 'blob'
       });
       
@@ -108,7 +106,6 @@ const HomePage = () => {
   
   // Function to refresh all images - simplified since we don't use timestamps
   const refreshAllSongImages = () => {
-    // Implementation simplified - no need to track timestamps
     console.log("Refreshing song images");
     // Force re-render to refresh images if needed
   };
@@ -118,7 +115,6 @@ const HomePage = () => {
     setIsRefreshing(true);
     try {
       await refreshSongs();
-      // Update images after songs are refreshed
       setTimeout(refreshAllSongImages, 300); // Small delay to ensure songs are loaded
     } catch (error) {
       console.error("Error refreshing songs:", error);
@@ -156,13 +152,14 @@ const HomePage = () => {
     setLoading(false);
   }, [allSongs]);
 
-  // Fetch all playlists for display and user playlists for dropdown
+  // Fetch all playlists regardless of authentication status
   useEffect(() => {
-    if (token) {
-      fetchAllPlaylists();
+    fetchAllPlaylists();
+    // Only fetch user playlists when authenticated
+    if (isAuthenticated && token) {
       fetchUserPlaylists();
     }
-  }, [token]);
+  }, [isAuthenticated, token]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -198,15 +195,10 @@ const HomePage = () => {
   const fetchAllPlaylists = async () => {
     setLoadingPlaylists(true);
     try {
-      // Removed myOnly=true parameter to fetch all playlists
-      const response = await axios.get('http://localhost:5000/playlists', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      // Make API call without authentication headers for public access
+      const response = await axios.get('http://localhost:5000/playlists');
       
       if (response.data && Array.isArray(response.data.playlists)) {
-        // Backend już zwraca likesCount i isFavorite, więc możemy używać danych bezpośrednio
         const playlistsWithCorrectNaming = response.data.playlists.map((playlist: any) => ({
           ...playlist,
           likesCount: playlist.likeCount, // Mapuj likeCount na likesCount dla spójności
@@ -233,6 +225,7 @@ const HomePage = () => {
   // Function to fetch only user's playlists for the "Add to playlist" dropdown
   const fetchUserPlaylists = async () => {
     try {
+      // This still needs authentication
       const response = await axios.get('http://localhost:5000/playlists?myOnly=true', {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -364,6 +357,11 @@ const HomePage = () => {
   const toggleAddToPlaylistDropdown = (e: React.MouseEvent, songId: number) => {
     e.stopPropagation(); // Prevent triggering the song play
     
+    if (!isAuthenticated) {
+      alert("Musisz być zalogowany, aby dodać utwór do playlisty.");
+      return;
+    }
+    
     if (openDropdownId === songId) {
       setOpenDropdownId(null);
     } else {
@@ -371,7 +369,7 @@ const HomePage = () => {
       const rect = button.getBoundingClientRect();
       
       // Calculate position relative to viewport
-      const top = Math.max(10, rect.top - 8); // 260px is approximate dropdown height
+      const top = Math.max(10, rect.top - 8);
       const right = Math.max(10, window.innerWidth - rect.right);
       
       setDropdownPosition({ top, right });
@@ -424,11 +422,8 @@ const HomePage = () => {
     setPlaylistError('');
     
     try {
-      const response = await axios.get(`http://localhost:5000/playlists/${playlist.id}/songs`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      // No authentication required
+      const response = await axios.get(`http://localhost:5000/playlists/${playlist.id}/songs`);
       
       if (response.data && Array.isArray(response.data.songs)) {
         setPlaylistSongs(response.data.songs);
@@ -449,9 +444,14 @@ const HomePage = () => {
     setPlaylistSongs([]);
   };
 
-  // Handle removing a song from playlist
+  // Handle removing a song from playlist - updated to check authentication
   const handleRemoveSongFromPlaylist = async (songId: number) => {
     if (!selectedPlaylist) return;
+    
+    if (!isAuthenticated) {
+      alert("Musisz być zalogowany, aby usunąć utwór z playlisty.");
+      return;
+    }
     
     try {
       await axios.delete(`http://localhost:5000/playlists/${selectedPlaylist.id}/songs/${songId}`, {
@@ -513,9 +513,14 @@ const HomePage = () => {
     }
   };
 
-  // Handle toggling playlist favorite - zaktualizowana funkcja
+  // Handle toggling playlist favorite - updated to check authentication
   const togglePlaylistFavorite = async (playlistId: number, e?: React.MouseEvent) => {
     if (e) e.stopPropagation(); // Prevent opening playlist when clicking favorite button
+    
+    if (!isAuthenticated) {
+      alert("Musisz być zalogowany, aby dodać playlistę do ulubionych.");
+      return;
+    }
     
     try {
       const playlist = allPlaylists.find(p => p.id === playlistId) || selectedPlaylist;
@@ -1065,17 +1070,30 @@ const HomePage = () => {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    {/* Favorite button for playlist detail view */}
+                    {/* Favorite button for playlist detail view - updated with authentication check */}
                     <button
                       onClick={(e) => togglePlaylistFavorite(selectedPlaylist.id, e)}
                       className={`p-2 rounded-full transition ${
-                        selectedPlaylist.isFavorite 
-                          ? 'text-red-500 hover:text-red-400 bg-red-500 bg-opacity-20' 
-                          : 'text-gray-400 hover:text-red-400 hover:bg-red-500 hover:bg-opacity-20'
+                        !isAuthenticated 
+                          ? 'text-gray-400 hover:text-gray-300 cursor-help' 
+                          : selectedPlaylist.isFavorite 
+                            ? 'text-red-500 hover:text-red-400 bg-red-500 bg-opacity-20' 
+                            : 'text-gray-400 hover:text-red-400 hover:bg-red-500 hover:bg-opacity-20'
                       }`}
-                      title={selectedPlaylist.isFavorite ? "Usuń z ulubionych" : "Dodaj do ulubionych"}
+                      title={!isAuthenticated 
+                        ? "Zaloguj się, aby dodać do ulubionych" 
+                        : selectedPlaylist.isFavorite 
+                          ? "Usuń z ulubionych" 
+                          : "Dodaj do ulubionych"}
                     >
-                      <Heart size={20} fill={selectedPlaylist.isFavorite ? 'currentColor' : 'none'} />
+                      {!isAuthenticated ? (
+                        <div className="flex items-center">
+                          <LogIn size={18} className="mr-1" />
+                          <Heart size={18} />
+                        </div>
+                      ) : (
+                        <Heart size={20} fill={selectedPlaylist.isFavorite ? 'currentColor' : 'none'} />
+                      )}
                     </button>
                     
                     <button
@@ -1147,26 +1165,35 @@ const HomePage = () => {
                               {/* Like count display */}
                               <span className="text-sm text-gray-400">{song.likes_count}</span>
                               
-                              {/* Heart/Favorite button */}
+                              {/* Heart/Favorite button - updated with authentication check */}
                               <button 
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  if (!isAuthenticated) {
+                                    alert("Musisz być zalogowany, aby dodać utwór do ulubionych.");
+                                    return;
+                                  }
                                   toggleFavorite(song.ID_utworu);
                                 }}
                                 className={`p-1 transition ${
-                                  favoriteSongs.includes(song.ID_utworu) 
-                                    ? 'text-red-500 hover:text-red-400' 
-                                    : 'text-gray-400 hover:text-red-400'
+                                  !isAuthenticated
+                                    ? 'text-gray-400 hover:text-gray-300 cursor-help'
+                                    : favoriteSongs.includes(song.ID_utworu) 
+                                      ? 'text-red-500 hover:text-red-400' 
+                                      : 'text-gray-400 hover:text-red-400'
                                 }`}
-                                title={favoriteSongs.includes(song.ID_utworu) ? "Usuń z ulubionych" : "Dodaj do ulubionych"}
+                                title={!isAuthenticated
+                                  ? "Zaloguj się, aby dodać do ulubionych"
+                                  : favoriteSongs.includes(song.ID_utworu) 
+                                    ? "Usuń z ulubionych" 
+                                    : "Dodaj do ulubionych"
+                                }
                               >
-                                {favoriteSongs.includes(song.ID_utworu) ? (
-                                  // Filled heart
+                                {favoriteSongs.includes(song.ID_utworu) && isAuthenticated ? (
                                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                     <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
                                   </svg>
                                 ) : (
-                                  // Empty heart
                                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                                   </svg>
@@ -1189,7 +1216,7 @@ const HomePage = () => {
               </div>
             ) : (
               <>
-                {/* Modified to include a flex container with the New Playlist button */}
+                {/* Playlists grid view */}
                 <div className="flex justify-between items-center px-4 pt-2 mb-2">
                   <h3 className="text-lg font-semibold text-white">
                     {isSearchResults ? "Znalezione playlisty" : "Wszystkie playlisty"}
@@ -1243,17 +1270,31 @@ const HomePage = () => {
                             <ListMusic size={48} className="text-white" />
                           )}
                           
-                          {/* Favorite button overlay */}
+                          {/* Favorite button overlay - updated with authentication check */}
                           <button
                             onClick={(e) => togglePlaylistFavorite(playlist.id, e)}
                             className={`absolute top-2 right-2 p-1.5 rounded-full transition opacity-0 group-hover:opacity-100 ${
-                              playlist.isFavorite 
-                                ? 'text-red-500 bg-black bg-opacity-50' 
-                                : 'text-white bg-black bg-opacity-50 hover:text-red-400'
+                              !isAuthenticated
+                                ? 'text-white bg-black bg-opacity-50 cursor-help'
+                                : playlist.isFavorite 
+                                  ? 'text-red-500 bg-black bg-opacity-50' 
+                                  : 'text-white bg-black bg-opacity-50 hover:text-red-400'
                             }`}
-                            title={playlist.isFavorite ? "Usuń z ulubionych" : "Dodaj do ulubionych"}
+                            title={!isAuthenticated
+                              ? "Zaloguj się, aby dodać do ulubionych"
+                              : playlist.isFavorite 
+                                ? "Usuń z ulubionych" 
+                                : "Dodaj do ulubionych"
+                            }
                           >
-                            <Heart size={16} fill={playlist.isFavorite ? 'currentColor' : 'none'} />
+                            {!isAuthenticated ? (
+                              <div className="flex items-center">
+                                <LogIn size={12} className="mr-0.5" />
+                                <Heart size={12} />
+                              </div>
+                            ) : (
+                              <Heart size={16} fill={playlist.isFavorite ? 'currentColor' : 'none'} />
+                            )}
                           </button>
                         </div>
                         <div className="p-3">
@@ -1262,7 +1303,7 @@ const HomePage = () => {
                           <div className="flex items-center justify-between mt-1">
                             <p className="text-xs text-gray-500">Utworzona przez: {playlist.createdBy}</p>
                             <div className="flex items-center gap-1 text-xs text-gray-500">
-                              <Heart size={12} className={playlist.isFavorite ? 'text-red-500' : 'text-gray-500'} />
+                              <Heart size={12} className={playlist.isFavorite && isAuthenticated ? 'text-red-500' : 'text-gray-500'} />
                               <span>{playlist.likesCount || 0}</span>
                             </div>
                           </div>

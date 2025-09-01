@@ -11,18 +11,18 @@ const TopBar = () => {
   const navigate = useNavigate();
   const { user, logout, isAuthenticated } = useAuth();
   const [imageLoading, setImageLoading] = useState(true);
-  const [imageKey, setImageKey] = useState(0); // Key to force image refresh
-  const [userDataKey, setUserDataKey] = useState(0); // Key to force user data refresh
+  const [imageKey, setImageKey] = useState(0); // Key for image component refresh
+  const [userDataKey, setUserDataKey] = useState(0); // Key for user data refresh
 
-  // Force image refresh when updateProfileImage is called
+  // Handle profile image updates by forcing rerender
   useEffect(() => {
     if (user?.id) {
       setImageLoading(true);
-      setImageKey(prev => prev + 1); // Force re-render of img element
+      setImageKey(prev => prev + 1);
     }
   }, [user?.id]);
 
-  // Force user data refresh when user object changes (including nick changes)
+  // Refresh user data display when user details change
   useEffect(() => {
     if (user) {
       setUserDataKey(prev => prev + 1);
@@ -43,14 +43,14 @@ const TopBar = () => {
 
   const handleLogoutClick = () => {
     logout();
-    navigate("/"); // Przekierowanie na stronę główną po wylogowaniu
+    navigate("/"); // Redirect to home after logout
   };
 
   return (
     <div className="flex items-center rounded-lg justify-between bg-gray-900 text-white p-4">
       <div className="flex items-center space-x-4">
         
-        {/* Przywrócenie zwykłego Link zamiast przycisku z reload */}
+        {/* Home navigation link */}
         <Link
           to="/"
           className={cn(buttonVariants(
@@ -64,6 +64,7 @@ const TopBar = () => {
           <span className="hidden md:inline">Home</span>
         </Link>
         
+        {/* Friends navigation link */}
         <Link to={"/friends"}
             className={cn(buttonVariants(
                     { 
@@ -75,6 +76,7 @@ const TopBar = () => {
             <span className="hidden md:inline">Przyjaciele</span>
         </Link>
         {isAuthenticated && (
+        /* Dashboard link - only for authenticated users */
         <Link to="/dashboard" 
             className={cn(buttonVariants(
                     { 
@@ -87,6 +89,7 @@ const TopBar = () => {
         </Link>
         )}
         {isAuthenticated && user?.isadmin === true && (
+        /* Admin panel link - only for admin users */
         <Link to="/adminPanel" 
             className={cn(buttonVariants(
                     { 
@@ -104,15 +107,18 @@ const TopBar = () => {
 
       <div className="flex items-center space-x-4">
         {isAuthenticated ? (
+          /* User profile section for logged in users */
           <>
             <div className="flex items-center space-x-3" key={userDataKey}>
               <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-600 flex items-center justify-center">
                 {imageLoading && (
+                  /* Loading spinner while profile image loads */
                   <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                 )}
                 {user?.id && (
+                  /* User profile image with cache-busting timestamp */
                   <img
-                    key={imageKey} // Force re-render when key changes
+                    key={imageKey}
                     src={`http://localhost:5000/profile/profile-image/${user.id}?t=${Date.now()}`}
                     alt="Profile"
                     className={`w-full h-full object-cover ${imageLoading ? 'hidden' : 'block'}`}
@@ -131,6 +137,7 @@ const TopBar = () => {
             </button>
           </>
         ) : (
+          /* Login button for non-authenticated users */
           <button
             onClick={handleLoginClick}
             className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition"

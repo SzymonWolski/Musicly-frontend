@@ -1,17 +1,16 @@
+// Defining encryption algorithm used throughout the module
 const ALGORITHM = 'AES-CBC';
 
-/**
- * Generates a deterministic encryption key based on timestamp
- */
+// Creates a cryptographic key from a timestamp to ensure consistent encryption/decryption
 async function generateKeyFromTimestamp(timestamp: number): Promise<CryptoKey> {
   const seed = timestamp.toString();
   const encoder = new TextEncoder();
   const data = encoder.encode(seed);
   
-  // Hash the timestamp to create a key
+  // Convert timestamp to a secure hash
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   
-  // Import the hash as a key
+  // Create a cryptographic key from the hash
   return await crypto.subtle.importKey(
     'raw',
     hashBuffer,
@@ -21,9 +20,7 @@ async function generateKeyFromTimestamp(timestamp: number): Promise<CryptoKey> {
   );
 }
 
-/**
- * Encrypts text using timestamp-based key
- */
+// Encrypts a string message using a timestamp-based key
 export async function encryptMessage(text: string, keyTimestamp: number): Promise<string> {
   const key = await generateKeyFromTimestamp(keyTimestamp);
   const iv = crypto.getRandomValues(new Uint8Array(16));
@@ -36,20 +33,18 @@ export async function encryptMessage(text: string, keyTimestamp: number): Promis
     data
   );
   
-  // Convert to hex and prepend IV
+  // Format result as hexadecimal with IV prepended
   const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
   const encryptedHex = Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join('');
   
   return ivHex + ':' + encryptedHex;
 }
 
-/**
- * Decrypts text using timestamp-based key
- */
+// Decrypts a previously encrypted message using the same timestamp-based key
 export async function decryptMessage(encryptedText: string, keyTimestamp: number): Promise<string> {
   const key = await generateKeyFromTimestamp(keyTimestamp);
   
-  // Extract IV and encrypted data
+  // Split and parse the IV and encrypted data components
   const parts = encryptedText.split(':');
   if (parts.length !== 2) {
     throw new Error('Invalid encrypted message format');
@@ -64,6 +59,7 @@ export async function decryptMessage(encryptedText: string, keyTimestamp: number
     encrypted
   );
   
+  // Convert decrypted data back to string
   const decoder = new TextDecoder();
   return decoder.decode(decrypted);
 }

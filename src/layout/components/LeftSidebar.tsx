@@ -18,7 +18,7 @@ interface Song {
 }
 
 const LeftSidebar = () => {
-  const { token } = useAuth();
+  const { token, isAuthenticated } = useAuth();
   const { 
     currentSong, 
     isPlaying, 
@@ -46,15 +46,20 @@ const LeftSidebar = () => {
   // Fetch detailed info for favorite songs
   useEffect(() => {
     // Only fetch when token is available
-    if (token) {
+    if (token && isAuthenticated) {
       fetchFavoriteSongDetails();
+    } else {
+      // Reset loading state when not authenticated
+      setLoadingFavorites(false);
+      setFavoriteDetails([]);
     }
-  }, [token, favoriteSongs]); // Add favoriteSongs as dependency to update when they change
+  }, [token, isAuthenticated, favoriteSongs]); // Add isAuthenticated as dependency
 
   const fetchFavoriteSongDetails = async () => {
     // Don't attempt to fetch if there's no token
-    if (!token) {
-      console.log("No token available, skipping favorites fetch");
+    if (!token || !isAuthenticated) {
+      console.log("No token available or not authenticated, skipping favorites fetch");
+      setLoadingFavorites(false);
       return;
     }
     
@@ -213,65 +218,67 @@ const LeftSidebar = () => {
           </div>
         </div>
         
-        {/* Favorites Section */}
-        <div className="border-b border-zinc-700">
-          <div 
-            className="flex items-center justify-between p-3 bg-zinc-800 cursor-pointer hover:bg-zinc-750"
-            onClick={() => setFavoritesOpen(!favoritesOpen)}
-          >
-            <div className="flex items-center">
-              <Heart size={16} className="text-red-500 mr-2" />
-              <span className="text-white text-sm font-medium">Ulubione</span>
+        {/* Favorites Section - Only show if user is authenticated */}
+        {isAuthenticated && (
+          <div className="border-b border-zinc-700">
+            <div 
+              className="flex items-center justify-between p-3 bg-zinc-800 cursor-pointer hover:bg-zinc-750"
+              onClick={() => setFavoritesOpen(!favoritesOpen)}
+            >
+              <div className="flex items-center">
+                <Heart size={16} className="text-red-500 mr-2" />
+                <span className="text-white text-sm font-medium">Ulubione</span>
+              </div>
+              {favoritesOpen ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
             </div>
-            {favoritesOpen ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
-          </div>
-          
-          {favoritesOpen && (
-            <div className="max-h-[30vh]">
-              <ScrollArea className="h-full">
-                {loadingFavorites ? (
-                  <div className="flex justify-center items-center py-4">
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
-                  </div>
-                ) : favoriteDetails.length === 0 ? (
-                  <div className="py-3 px-4 text-sm text-gray-400 text-center">
-                    Brak ulubionych piosenek
-                  </div>
-                ) : (
-                  <ul className="divide-y divide-zinc-700/50">
-                    {favoriteDetails.map((song) => (
-                      <li 
-                        key={song.ID_utworu}
-                        className={`px-4 py-2 text-sm hover:bg-zinc-800 cursor-pointer flex items-center justify-between ${
-                          currentSong?.ID_utworu === song.ID_utworu ? 'bg-zinc-800' : ''
-                        }`}
-                        onClick={() => handleFavoriteSongClick(song)}
-                      >
-                        <div className="truncate">
-                          <p className="text-sm text-white truncate">{song.nazwa_utworu}</p>
-                          <p className="text-xs text-gray-400 truncate">{song.Autor.kryptonim_artystyczny}</p>
-                        </div>
-                        {currentSong?.ID_utworu === song.ID_utworu ? (
-                          <div className="flex-shrink-0 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
-                            {isPlaying ? (
-                              <span className="w-2 h-2 bg-white rounded-full"></span>
-                            ) : (
-                              <Play size={8} className="text-white" />
-                            )}
+            
+            {favoritesOpen && (
+              <div className="max-h-[30vh]">
+                <ScrollArea className="h-full">
+                  {loadingFavorites ? (
+                    <div className="flex justify-center items-center py-4">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+                    </div>
+                  ) : favoriteDetails.length === 0 ? (
+                    <div className="py-3 px-4 text-sm text-gray-400 text-center">
+                      Brak ulubionych piosenek
+                    </div>
+                  ) : (
+                    <ul className="divide-y divide-zinc-700/50">
+                      {favoriteDetails.map((song) => (
+                        <li 
+                          key={song.ID_utworu}
+                          className={`px-4 py-2 text-sm hover:bg-zinc-800 cursor-pointer flex items-center justify-between ${
+                            currentSong?.ID_utworu === song.ID_utworu ? 'bg-zinc-800' : ''
+                          }`}
+                          onClick={() => handleFavoriteSongClick(song)}
+                        >
+                          <div className="truncate">
+                            <p className="text-sm text-white truncate">{song.nazwa_utworu}</p>
+                            <p className="text-xs text-gray-400 truncate">{song.Autor.kryptonim_artystyczny}</p>
                           </div>
-                        ) : (
-                          <Play size={14} className="text-blue-400 flex-shrink-0" />
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </ScrollArea>
-            </div>
-          )}
-        </div>
+                          {currentSong?.ID_utworu === song.ID_utworu ? (
+                            <div className="flex-shrink-0 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                              {isPlaying ? (
+                                <span className="w-2 h-2 bg-white rounded-full"></span>
+                              ) : (
+                                <Play size={8} className="text-white" />
+                              )}
+                            </div>
+                          ) : (
+                            <Play size={14} className="text-blue-400 flex-shrink-0" />
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </ScrollArea>
+              </div>
+            )}
+          </div>
+        )}
         
-        {/* Playback Queue Section - renamed from "Current Playlist" */}
+        {/* Playback Queue Section */}
         <div className="flex-1 flex flex-col">
           <div 
             className="flex items-center justify-between p-3 bg-zinc-800 cursor-pointer hover:bg-zinc-750"
