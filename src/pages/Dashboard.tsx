@@ -9,11 +9,12 @@ interface Playlist {
   name: string;
   songCount: number;
   imageFilename?: string;
+  isFavorite?: boolean;
   createdBy?: {
-    id: number;
+    id?: number;
     username: string;
-    firstName: string;
-    lastName: string;
+    firstName?: string;
+    lastName?: string;
   };
 }
 
@@ -183,13 +184,16 @@ const Dashboard = () => {
       });
       
       if (response.data && Array.isArray(response.data.playlists)) {
-        // Map the response to match our interface
+        // Map the response to match our interface - updated mapping
         const mappedPlaylists = response.data.playlists.map((playlist: any) => ({
           id: playlist.id,
           name: playlist.name,
           songCount: parseInt(playlist.songCount) || 0,
           imageFilename: playlist.imageFilename,
-          createdBy: playlist.createdBy
+          isFavorite: playlist.isFavorite || false,
+          createdBy: {
+            username: user?.nick || ""
+          }
         }));
         
         setUserPlaylists(mappedPlaylists);
@@ -211,6 +215,7 @@ const Dashboard = () => {
   const fetchFavoritePlaylists = async () => {
     setLoadingFavoritePlaylists(true);
     try {
+      // Use the updated endpoint for favorite playlists
       const response = await axios.get('http://localhost:5000/favorites/playlists', {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -218,17 +223,15 @@ const Dashboard = () => {
       });
       
       if (response.data && Array.isArray(response.data.favoritePlaylists)) {
-        // Map the response to match our interface - the backend returns different field names
+        // Map the response to match our interface with updated fields
         const mappedPlaylists = response.data.favoritePlaylists.map((playlist: any) => ({
           id: playlist.playlistId,
           name: playlist.playlistName,
           songCount: parseInt(playlist.songCount) || 0,
           imageFilename: playlist.imageFilename,
+          isFavorite: true, // These are favorites by definition
           createdBy: {
-            id: 0, // Not provided by favorites endpoint
-            username: playlist.createdBy,
-            firstName: '',
-            lastName: ''
+            username: playlist.createdBy
           }
         }));
         
@@ -250,10 +253,13 @@ const Dashboard = () => {
 
   const fetchPlaylistImage = async (playlistId: number) => {
     try {
+      // Use the updated image endpoint
       const response = await fetch(`http://localhost:5000/playlists/${playlistId}/image`, {
         headers: {
           'Authorization': `Bearer ${token}`
-        }
+        },
+        // Add cache control to prevent browser caching
+        cache: 'no-store'
       });
       
       if (response.ok) {
@@ -271,11 +277,12 @@ const Dashboard = () => {
 
   const fetchFavoritePlaylistImage = async (playlistId: number) => {
     try {
-      // Use the public endpoint for favorite playlists since we might not own them
-      const response = await fetch(`http://localhost:5000/playlists/${playlistId}/image/public`, {
+      // No need for public endpoint anymore, the regular endpoint works for all accessible playlists
+      const response = await fetch(`http://localhost:5000/playlists/${playlistId}/image`, {
         headers: {
           'Authorization': `Bearer ${token}`
-        }
+        },
+        cache: 'no-store'
       });
       
       if (response.ok) {
@@ -288,25 +295,6 @@ const Dashboard = () => {
       }
     } catch (error) {
       console.error('Error fetching favorite playlist image:', error);
-      // If public endpoint fails, try the regular endpoint in case user owns the playlist
-      try {
-        const response = await fetch(`http://localhost:5000/playlists/${playlistId}/image`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        
-        if (response.ok) {
-          const blob = await response.blob();
-          const imageUrl = URL.createObjectURL(blob);
-          setFavoritePlaylistImages(prev => ({
-            ...prev,
-            [playlistId]: imageUrl
-          }));
-        }
-      } catch (fallbackError) {
-        console.error('Error fetching playlist image (fallback):', fallbackError);
-      }
     }
   };
 
@@ -340,7 +328,11 @@ const Dashboard = () => {
           id: response.data.playlist.id,
           name: response.data.playlist.name,
           songCount: 0,
-          imageFilename: undefined
+          isFavorite: false,
+          imageFilename: undefined,
+          createdBy: {
+            username: user?.nick || ""
+          }
         };
         
         // Jeśli wybrano obraz, prześlij go osobno
@@ -549,14 +541,14 @@ const Dashboard = () => {
       const playlist = userPlaylists.find(p => p.id === playlistId) || favoritePlaylists.find(p => p.id === playlistId) || selectedPlaylist;
       if (!playlist) return;
       
-      let newIsFavorite = false;
+      // Check if this is a favorite playlist
+      const isFavorite = favoritePlaylists.some(p => p.id === playlistId);
       
-      if (playlist.createdBy?.username) {
-        // This is a favorite playlist, remove from favorites
+      if (isFavorite) {
+        // Remove from favorites
         await axios.delete(`http://localhost:5000/favorites/playlists/${playlistId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
-        newIsFavorite = false;
         
         // Remove from favorite playlists list
         setFavoritePlaylists(prev => prev.filter(p => p.id !== playlistId));
@@ -571,23 +563,39 @@ const Dashboard = () => {
           });
         }
         
+        // If this was a user's own playlist, update its isFavorite status
+        setUserPlaylists(prev => prev.map(p => 
+          p.id === playlistId ? { ...p, isFavorite: false } : p
+        ));
+        
+        // Update selected playlist if it's the one being unfavorited
+        if (selectedPlaylist?.id === playlistId) {
+          setSelectedPlaylist(prev => prev ? { ...prev, isFavorite: false } : null);
+        }
+        
         alert('Usunięto z ulubionych playlist!');
       } else {
-        // This is user's own playlist, add to favorites
+        // Add to favorites
         await axios.post('http://localhost:5000/favorites/playlists', 
           { playlistId },
           { headers: { 'Authorization': `Bearer ${token}` } }
         );
-        newIsFavorite = true;
+        
+        // If this was a user's own playlist, update its isFavorite status
+        setUserPlaylists(prev => prev.map(p => 
+          p.id === playlistId ? { ...p, isFavorite: true } : p
+        ));
+        
+        // Update selected playlist if it's the one being favorited
+        if (selectedPlaylist?.id === playlistId) {
+          setSelectedPlaylist(prev => prev ? { ...prev, isFavorite: true } : null);
+        }
+        
+        // Refresh the favorites list
+        fetchFavoritePlaylists();
+        
         alert('Dodano do ulubionych playlist!');
       }
-      
-      // Close playlist content view if we removed it from favorites
-      if (!newIsFavorite && selectedPlaylist?.id === playlistId && playlist.createdBy?.username) {
-        setSelectedPlaylist(null);
-        setPlaylistSongs([]);
-      }
-      
     } catch (error) {
       console.error('Error toggling playlist favorite:', error);
       alert('Nie udało się zmienić statusu ulubionej playlisty.');
@@ -757,28 +765,30 @@ const Dashboard = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     {/* Favorite button for playlists */}
-                    {selectedPlaylist.createdBy?.username && (
+                    <button
+                      onClick={(e) => togglePlaylistFavorite(selectedPlaylist.id, e)}
+                      className={`p-2 transition ${
+                        favoritePlaylists.some(p => p.id === selectedPlaylist.id)
+                          ? 'text-red-500 hover:text-red-400' 
+                          : 'text-gray-400 hover:text-red-400'
+                      }`}
+                      title={favoritePlaylists.some(p => p.id === selectedPlaylist.id) ? "Usuń z ulubionych" : "Dodaj do ulubionych"}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                    
+                    {/* Only show delete button if it's the user's own playlist */}
+                    {!selectedPlaylist.createdBy?.username || selectedPlaylist.createdBy.username === user?.nick && (
                       <button
-                        onClick={(e) => togglePlaylistFavorite(selectedPlaylist.id, e)}
-                        className={`p-2 transition ${
-                          selectedPlaylist.createdBy?.username 
-                            ? 'text-red-500 hover:text-red-400' 
-                            : 'text-gray-400 hover:text-red-400'
-                        }`}
-                        title="Usuń z ulubionych"
+                        onClick={() => handleDeletePlaylist(selectedPlaylist.id, selectedPlaylist.name)}
+                        className="px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition"
+                        title="Usuń playlistę"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
-                        </svg>
+                        Usuń playlistę
                       </button>
                     )}
-                    <button
-                      onClick={() => handleDeletePlaylist(selectedPlaylist.id, selectedPlaylist.name)}
-                      className="px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition"
-                      title="Usuń playlistę"
-                    >
-                      Usuń playlistę
-                    </button>
                   </div>
                 </div>
 
@@ -925,13 +935,13 @@ const Dashboard = () => {
                             <button
                               onClick={(e) => togglePlaylistFavorite(playlist.id, e)}
                               className={`p-2 transition ${
-                                favoritePlaylists.find(fp => fp.id === playlist.id) 
+                                favoritePlaylists.some(p => p.id === playlist.id) 
                                   ? 'text-red-500 hover:text-red-400' 
                                   : 'text-gray-400 hover:text-red-400'
                               }`}
-                              title={favoritePlaylists.find(fp => fp.id === playlist.id) ? "Usuń z ulubionych" : "Dodaj do ulubionych"}
+                              title={favoritePlaylists.some(p => p.id === playlist.id) ? "Usuń z ulubionych" : "Dodaj do ulubionych"}
                             >
-                              {favoritePlaylists.find(fp => fp.id === playlist.id) ? (
+                              {favoritePlaylists.some(p => p.id === playlist.id) ? (
                                 // Filled heart
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                   <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
@@ -1000,12 +1010,8 @@ const Dashboard = () => {
                             
                             <button
                               onClick={(e) => togglePlaylistFavorite(playlist.id, e)}
-                              className={`p-2 transition ${
-                                playlist.createdBy?.username 
-                                  ? 'text-red-500 hover:text-red-400' 
-                                  : 'text-gray-400 hover:text-red-400'
-                              }`}
-                              title={playlist.createdBy?.username ? "Usuń z ulubionych" : "Dodaj do ulubionych"}
+                              className="p-2 transition text-red-500 hover:text-red-400"
+                              title="Usuń z ulubionych"
                             >
                               {playlist.createdBy?.username ? (
                                 // Filled heart - this is a favorite playlist
