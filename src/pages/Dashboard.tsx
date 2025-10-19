@@ -1,6 +1,6 @@
 import { useAuth } from "../context/AuthContext";
 import { useState, useRef, useEffect } from "react";
-import { Upload, Plus, ListMusic, X, ArrowLeft } from "lucide-react";
+import { Upload, Plus, ListMusic, X, ArrowLeft, Lock, Users, Share2 } from "lucide-react";
 import axios from "axios";
 import { useAudioPlayer } from "../context/AudioPlayerContext";
 
@@ -10,12 +10,17 @@ interface Playlist {
   songCount: number;
   imageFilename?: string;
   isFavorite?: boolean;
+  isPrivate?: boolean;
+  allowFriendsAccess?: boolean;
   createdBy?: {
     id?: number;
     username: string;
     firstName?: string;
     lastName?: string;
   };
+  isOwner?: boolean;
+  accessType?: 'explicit' | 'friend';
+  sharedAt?: string;
 }
 
 interface Song {
@@ -56,6 +61,20 @@ const Dashboard = () => {
   const [createPlaylistError, setCreatePlaylistError] = useState('');
   const [playlistImages, setPlaylistImages] = useState<{[key: number]: string}>({});
   const playlistFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Shared playlists states
+  const [sharedPlaylists, setSharedPlaylists] = useState<Playlist[]>([]);
+  const [loadingSharedPlaylists, setLoadingSharedPlaylists] = useState(false);
+  const [sharedPlaylistImages, setSharedPlaylistImages] = useState<{[key: number]: string}>({});
+
+  // Privacy settings states
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [allowFriendsAccess, setAllowFriendsAccess] = useState(true);
+  const [showAccessModal, setShowAccessModal] = useState(false);
+  const [availableFriends, setAvailableFriends] = useState<any[]>([]);
+  const [usersWithAccess, setUsersWithAccess] = useState<any[]>([]);
+  const [loadingFriends, setLoadingFriends] = useState(false);
+  const [loadingAccess, setLoadingAccess] = useState(false);
 
   // Favorite playlists states
   const [favoritePlaylists, setFavoritePlaylists] = useState<Playlist[]>([]);
@@ -171,6 +190,7 @@ const Dashboard = () => {
     if (token) {
       fetchUserPlaylists();
       fetchFavoritePlaylists();
+      fetchSharedPlaylists();
     }
   }, [token]);
 
@@ -191,9 +211,12 @@ const Dashboard = () => {
           songCount: parseInt(playlist.songCount) || 0,
           imageFilename: playlist.imageFilename,
           isFavorite: playlist.isFavorite || false,
+          isPrivate: playlist.isPrivate || false,
+          allowFriendsAccess: playlist.allowFriendsAccess || false,
           createdBy: {
             username: user?.nick || ""
-          }
+          },
+          isOwner: true
         }));
         
         setUserPlaylists(mappedPlaylists);
@@ -251,6 +274,77 @@ const Dashboard = () => {
     }
   };
 
+  const fetchSharedPlaylists = async () => {
+    setLoadingSharedPlaylists(true);
+    try {
+      const response = await axios.get('http://localhost:5000/playlists/shared/with-me', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      console.log('Shared playlists response:', response.data);  // Debug logging
+      
+      if (response.data && response.data.success) {
+        const explicitShared = response.data.explicitShared || [];
+        const friendShared = response.data.friendShared || [];
+        
+        // Safely combine both types of shared playlists with proper type handling
+        const allShared = [
+          ...explicitShared.map((p: any) => ({
+            id: p.id || 0,
+            name: p.name || 'Unnamed Playlist',
+            songCount: parseInt(p.songCount) || 0,
+            imageFilename: p.imageFilename,
+            isFavorite: Boolean(p.isFavorite),
+            isPrivate: Boolean(p.isPrivate),
+            allowFriendsAccess: Boolean(p.allowFriendsAccess),
+            createdBy: {
+              id: p.ownerId,
+              username: p.createdBy || 'Unknown'
+            },
+            accessType: 'explicit' as const,
+            sharedAt: p.sharedAt,
+            isOwner: false
+          })),
+          ...friendShared.map((p: any) => ({
+            id: p.id || 0,
+            name: p.name || 'Unnamed Playlist',
+            songCount: parseInt(p.songCount) || 0,
+            imageFilename: p.imageFilename,
+            isFavorite: Boolean(p.isFavorite),
+            isPrivate: Boolean(p.isPrivate),
+            allowFriendsAccess: Boolean(p.allowFriendsAccess),
+            createdBy: {
+              id: p.ownerId,
+              username: p.createdBy || 'Unknown'
+            },
+            accessType: 'friend' as const,
+            sharedAt: p.friendSince,
+            isOwner: false
+          }))
+        ];
+        
+        setSharedPlaylists(allShared);
+        
+        // Fetch images for shared playlists that have them
+        allShared.forEach((playlist) => {
+          if (playlist.imageFilename) {
+            fetchSharedPlaylistImage(playlist.id);
+          }
+        });
+      } else {
+        console.error('Invalid response format from shared playlists endpoint:', response.data);
+        setSharedPlaylists([]);
+      }
+    } catch (error) {
+      console.error('Error fetching shared playlists:', error);
+      setSharedPlaylists([]); // Set empty array on error to avoid undefined state
+    } finally {
+      setLoadingSharedPlaylists(false);
+    }
+  };
+
   const fetchPlaylistImage = async (playlistId: number) => {
     try {
       // Use the updated image endpoint
@@ -298,6 +392,28 @@ const Dashboard = () => {
     }
   };
 
+  const fetchSharedPlaylistImage = async (playlistId: number) => {
+    try {
+      const response = await fetch(`http://localhost:5000/playlists/${playlistId}/image`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        cache: 'no-store'
+      });
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const imageUrl = URL.createObjectURL(blob);
+        setSharedPlaylistImages(prev => ({
+          ...prev,
+          [playlistId]: imageUrl
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching shared playlist image:', error);
+    }
+  };
+
   const handleCreatePlaylist = async () => {
     if (!newPlaylistName.trim()) {
       setCreatePlaylistError('Nazwa playlisty nie może być pusta.');
@@ -313,9 +429,11 @@ const Dashboard = () => {
     setCreatePlaylistError('');
     
     try {
-      // Najpierw utwórz playlistę (bez obrazu)
+      // Create playlist with privacy settings
       const response = await axios.post('http://localhost:5000/playlists', {
-        name: newPlaylistName.trim()
+        name: newPlaylistName.trim(),
+        isPrivate: isPrivate,
+        allowFriendsAccess: allowFriendsAccess
       }, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -329,10 +447,13 @@ const Dashboard = () => {
           name: response.data.playlist.name,
           songCount: 0,
           isFavorite: false,
+          isPrivate: isPrivate,
+          allowFriendsAccess: allowFriendsAccess,
           imageFilename: undefined,
           createdBy: {
             username: user?.nick || ""
-          }
+          },
+          isOwner: true
         };
         
         // Jeśli wybrano obraz, prześlij go osobno
@@ -407,6 +528,8 @@ const Dashboard = () => {
     setNewPlaylistName('');
     setNewPlaylistImage(null);
     setCreatePlaylistError('');
+    setIsPrivate(false);
+    setAllowFriendsAccess(true);
   };
 
   const closeCreatePlaylistModal = () => {
@@ -664,6 +787,161 @@ const Dashboard = () => {
     setChangeNickError('');
   };
 
+  // Toggle playlist privacy
+  const togglePlaylistPrivacy = async () => {
+    if (!selectedPlaylist) return;
+    
+    try {
+      const newPrivacyStatus = !selectedPlaylist.isPrivate;
+      
+      await axios.put(`http://localhost:5000/playlists/${selectedPlaylist.id}/privacy`, {
+        isPrivate: newPrivacyStatus
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      // Update the selected playlist's privacy status
+      setSelectedPlaylist(prev => prev ? {
+        ...prev,
+        isPrivate: newPrivacyStatus
+      } : null);
+      
+      // Update in the playlists list
+      setUserPlaylists(prevPlaylists => 
+        prevPlaylists.map(playlist => 
+          playlist.id === selectedPlaylist.id 
+            ? { ...playlist, isPrivate: newPrivacyStatus }
+            : playlist
+        )
+      );
+      
+      alert(newPrivacyStatus 
+        ? 'Playlista ustawiona jako prywatna' 
+        : 'Playlista ustawiona jako publiczna');
+    } catch (error) {
+      console.error('Error toggling playlist privacy:', error);
+      alert('Nie udało się zmienić statusu prywatności playlisty.');
+    }
+  };
+
+  // Toggle friends access
+  const toggleFriendsAccess = async () => {
+    if (!selectedPlaylist) return;
+    
+    try {
+      const newStatus = !selectedPlaylist.allowFriendsAccess;
+      
+      await axios.put(`http://localhost:5000/playlists/${selectedPlaylist.id}/privacy`, {
+        allowFriendsAccess: newStatus
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      // Update the selected playlist
+      setSelectedPlaylist(prev => prev ? {
+        ...prev,
+        allowFriendsAccess: newStatus
+      } : null);
+      
+      // Update in the playlists list
+      setUserPlaylists(prevPlaylists => 
+        prevPlaylists.map(playlist => 
+          playlist.id === selectedPlaylist.id 
+            ? { ...playlist, allowFriendsAccess: newStatus }
+            : playlist
+        )
+      );
+      
+      alert(newStatus 
+        ? 'Dostęp dla znajomych włączony' 
+        : 'Dostęp dla znajomych wyłączony');
+    } catch (error) {
+      console.error('Error toggling friends access:', error);
+      alert('Nie udało się zmienić ustawień dostępu dla znajomych.');
+    }
+  };
+
+  // Manage access modal
+  const openAccessModal = async () => {
+    if (!selectedPlaylist) return;
+    
+    setShowAccessModal(true);
+    setLoadingAccess(true);
+    setLoadingFriends(true);
+    
+    try {
+      // Get users with access and available friends
+      const accessResponse = await axios.get(`http://localhost:5000/playlists/${selectedPlaylist.id}/access`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (accessResponse.data.success) {
+        setUsersWithAccess(accessResponse.data.usersWithAccess || []);
+        setAvailableFriends(accessResponse.data.friendsWithAccess || []);
+        
+        // Update privacy settings from backend
+        const { isPrivate, allowFriendsAccess } = accessResponse.data.privacySettings;
+        setSelectedPlaylist(prev => prev ? {
+          ...prev,
+          isPrivate,
+          allowFriendsAccess
+        } : null);
+      }
+    } catch (error) {
+      console.error('Error loading access data:', error);
+      alert('Nie udało się załadować danych o dostępie.');
+    } finally {
+      setLoadingAccess(false);
+      setLoadingFriends(false);
+    }
+  };
+
+  // Grant access to a user
+  const grantAccess = async (userId: number) => {
+    if (!selectedPlaylist) return;
+    
+    try {
+      await axios.post(`http://localhost:5000/playlists/${selectedPlaylist.id}/access`, {
+        targetUserId: userId
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      // Refresh the access list
+      openAccessModal();
+    } catch (error) {
+      console.error('Error granting access:', error);
+      alert('Nie udało się przyznać dostępu.');
+    }
+  };
+
+  // Revoke access from a user
+  const revokeAccess = async (userId: number) => {
+    if (!selectedPlaylist) return;
+    
+    try {
+      await axios.delete(`http://localhost:5000/playlists/${selectedPlaylist.id}/access/${userId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      // Refresh the access list
+      openAccessModal();
+    } catch (error) {
+      console.error('Error revoking access:', error);
+      alert('Nie udało się cofnąć dostępu.');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-800 text-white p-4">
       <div className="max-w-7xl mx-auto bg-gray-700 rounded-lg p-8 shadow-lg">
@@ -762,8 +1040,77 @@ const Dashboard = () => {
                     <span className="ml-3 text-sm text-gray-400">
                       ({selectedPlaylist.songCount} utwor{selectedPlaylist.songCount === 1 ? '' : selectedPlaylist.songCount < 5 ? 'y' : 'ów'})
                     </span>
+                    
+                    {/* Display private/public status */}
+                    {selectedPlaylist.isPrivate !== undefined && (
+                      <span className={`ml-2 px-2 py-0.5 text-xs rounded-full flex items-center ${
+                        selectedPlaylist.isPrivate 
+                          ? 'bg-purple-700 text-white' 
+                          : 'bg-green-700 text-white'
+                      }`}>
+                        {selectedPlaylist.isPrivate ? (
+                          <>
+                            <Lock size={12} className="mr-1" />
+                            Prywatna
+                          </>
+                        ) : (
+                          <>
+                            <Users size={12} className="mr-1" />
+                            Publiczna
+                          </>
+                        )}
+                      </span>
+                    )}
+                    
+                    {/* Display friend access badge if applicable */}
+                    {selectedPlaylist.isPrivate && selectedPlaylist.allowFriendsAccess && (
+                      <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-blue-700 text-white flex items-center">
+                        <Users size={12} className="mr-1" />
+                        Dostępna dla znajomych
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
+                    {/* Only show privacy and access controls if it's the user's own playlist */}
+                    {(!selectedPlaylist.createdBy?.username || selectedPlaylist.createdBy.username === user?.nick || selectedPlaylist.isOwner) && (
+                      <>
+                        {/* Privacy toggle button */}
+                        <button
+                          onClick={togglePlaylistPrivacy}
+                          className={`px-3 py-1.5 text-sm rounded-lg transition flex items-center ${
+                            selectedPlaylist.isPrivate
+                              ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                              : 'bg-green-600 hover:bg-green-700 text-white'
+                          }`}
+                          title={selectedPlaylist.isPrivate ? "Zmień na publiczną" : "Zmień na prywatną"}
+                        >
+                          {selectedPlaylist.isPrivate ? (
+                            <>
+                              <Lock size={14} className="mr-1" />
+                              Prywatna
+                            </>
+                          ) : (
+                            <>
+                              <Users size={14} className="mr-1" />
+                              Publiczna
+                            </>
+                          )}
+                        </button>
+                        
+                        {/* Access management button - only for private playlists */}
+                        {selectedPlaylist.isPrivate && (
+                          <button
+                            onClick={openAccessModal}
+                            className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center"
+                            title="Zarządzaj dostępem"
+                          >
+                            <Share2 size={14} className="mr-1" />
+                            Zarządzaj dostępem
+                          </button>
+                        )}
+                      </>
+                    )}
+                    
                     {/* Favorite button for playlists */}
                     <button
                       onClick={(e) => togglePlaylistFavorite(selectedPlaylist.id, e)}
@@ -780,7 +1127,7 @@ const Dashboard = () => {
                     </button>
                     
                     {/* Only show delete button if it's the user's own playlist */}
-                    {!selectedPlaylist.createdBy?.username || selectedPlaylist.createdBy.username === user?.nick && (
+                    {(!selectedPlaylist.createdBy?.username || selectedPlaylist.createdBy.username === user?.nick || selectedPlaylist.isOwner) && (
                       <button
                         onClick={() => handleDeletePlaylist(selectedPlaylist.id, selectedPlaylist.name)}
                         className="px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition"
@@ -849,7 +1196,7 @@ const Dashboard = () => {
                               ) : (
                                 // Empty heart
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                                 </svg>
                               )}
                             </button>
@@ -873,8 +1220,8 @@ const Dashboard = () => {
                 )}
               </div>
             ) : (
-              /* Main playlists view - split into two columns */
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              /* Main playlists view - now with three columns */
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Left Column - Your Playlists */}
                 <div className="space-y-4">
                   <div className="flex justify-between items-center h-10">
@@ -926,7 +1273,23 @@ const Dashboard = () => {
                           
                           <div className="flex-1 p-3 flex justify-between items-center">
                             <div>
-                              <h4 className="font-medium text-white truncate">{playlist.name}</h4>
+                              <div className="flex items-center">
+                                <h4 className="font-medium text-white truncate">{playlist.name}</h4>
+                                
+                                {/* Show privacy icon */}
+                                {playlist.isPrivate && (
+                                  <span title="Playlista prywatna">
+                                    <Lock size={14} className="ml-2 text-purple-400" />
+                                  </span>
+                                )}
+                                
+                                {/* Show friends access icon */}
+                                {playlist.isPrivate && playlist.allowFriendsAccess && (
+                                  <span title="Dostępna dla znajomych">
+                                    <Users size={14} className="ml-1 text-blue-400" />
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-sm text-gray-300">
                                 {playlist.songCount} utwor{playlist.songCount === 1 ? '' : playlist.songCount < 5 ? 'y' : 'ów'}
                               </p>
@@ -949,9 +1312,81 @@ const Dashboard = () => {
                               ) : (
                                 // Empty heart
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                                 </svg>
                               )}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Middle Column - Shared With Me */}
+                <div className="space-y-4">
+                  <div className="h-10 flex items-center">
+                    <h2 className="text-2xl font-bold text-white">Udostępnione Tobie</h2>
+                  </div>
+
+                  {loadingSharedPlaylists ? (
+                    <div className="flex justify-center items-center h-40">
+                      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
+                    </div>
+                  ) : sharedPlaylists.length === 0 ? (
+                    <div className="bg-gray-600 rounded-lg text-center text-gray-300 p-8">
+                      <Share2 size={48} className="mx-auto mb-4 text-gray-400" />
+                      <p className="text-lg mb-2">Brak udostępnionych playlist</p>
+                      <p className="text-sm text-gray-400">Nikt nie udostępnił Ci jeszcze żadnej playlisty</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {sharedPlaylists.map((playlist) => (
+                        <div 
+                          key={playlist.id}
+                          className="bg-gray-600 rounded-lg overflow-hidden hover:bg-gray-500 transition cursor-pointer flex"
+                          onClick={() => openPlaylistContent(playlist)}
+                        >
+                          <div className="w-16 h-17 bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center flex-shrink-0">
+                            {playlist.imageFilename && sharedPlaylistImages[playlist.id] ? (
+                              <img
+                                src={sharedPlaylistImages[playlist.id]}
+                                alt={`Okładka ${playlist.name}`}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <Share2 size={24} className="text-white" />
+                            )}
+                          </div>
+                          
+                          <div className="flex-1 p-3 flex justify-between items-center">
+                            <div>
+                              <div className="flex items-center">
+                                <h4 className="font-medium text-white truncate">{playlist.name}</h4>
+                                <span title="Playlista prywatna">
+                                  <Lock size={14} className="ml-2 text-purple-400" />
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-300">
+                                {playlist.createdBy?.username} • {playlist.songCount} utwor{playlist.songCount === 1 ? '' : playlist.songCount < 5 ? 'y' : 'ów'}
+                              </p>
+                              <p className="text-xs text-gray-400">
+                                {playlist.accessType === 'explicit' ? 'Udostępniona bezpośrednio' : 'Dostęp dla znajomych'}
+                              </p>
+                            </div>
+                            
+                            <button
+                              onClick={(e) => togglePlaylistFavorite(playlist.id, e)}
+                              className={`p-2 transition ${
+                                favoritePlaylists.some(p => p.id === playlist.id) 
+                                  ? 'text-red-500 hover:text-red-400' 
+                                  : 'text-gray-400 hover:text-red-400'
+                              }`}
+                              title={favoritePlaylists.some(p => p.id === playlist.id) ? "Usuń z ulubionych" : "Dodaj do ulubionych"}
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill={favoritePlaylists.some(p => p.id === playlist.id) ? "currentColor" : "none"} stroke="currentColor">
+                                <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
+                              </svg>
                             </button>
                           </div>
                         </div>
@@ -1002,7 +1437,16 @@ const Dashboard = () => {
                           
                           <div className="flex-1 p-3 flex justify-between items-center">
                             <div>
-                              <h4 className="font-medium text-white truncate">{playlist.name}</h4>
+                              <div className="flex items-center">
+                                <h4 className="font-medium text-white truncate">{playlist.name}</h4>
+                                
+                                {/* Show privacy icon */}
+                                {playlist.isPrivate && (
+                                  <span title="Playlista prywatna">
+                                    <Lock size={14} className="ml-2 text-purple-400" />
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-sm text-gray-300">
                                 {playlist.createdBy?.username || 'Nieznany użytkownik'} • {playlist.songCount} utwor{playlist.songCount === 1 ? '' : playlist.songCount < 5 ? 'y' : 'ów'}
                               </p>
@@ -1013,17 +1457,9 @@ const Dashboard = () => {
                               className="p-2 transition text-red-500 hover:text-red-400"
                               title="Usuń z ulubionych"
                             >
-                              {playlist.createdBy?.username ? (
-                                // Filled heart - this is a favorite playlist
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                  <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
-                                </svg>
-                              ) : (
-                                // Empty heart - this is user's own playlist, can be favorited
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                                </svg>
-                              )}
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
+                              </svg>
                             </button>
                           </div>
                         </div>
@@ -1217,6 +1653,37 @@ const Dashboard = () => {
                   className="hidden"
                 />
               </div>
+
+              {/* Privacy settings */}
+              <div className="mt-4">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="isPrivate"
+                    checked={isPrivate}
+                    onChange={(e) => setIsPrivate(e.target.checked)}
+                    className="mr-2 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="isPrivate" className="text-sm font-medium text-gray-300">
+                    Playlista prywatna
+                  </label>
+                </div>
+                
+                {isPrivate && (
+                  <div className="flex items-center mt-2 ml-6">
+                    <input
+                      type="checkbox"
+                      id="allowFriendsAccess"
+                      checked={allowFriendsAccess}
+                      onChange={(e) => setAllowFriendsAccess(e.target.checked)}
+                      className="mr-2 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <label htmlFor="allowFriendsAccess" className="text-sm font-medium text-gray-300">
+                      Zezwalaj na dostęp znajomym
+                    </label>
+                  </div>
+                )}
+              </div>
               
               {createPlaylistError && (
                 <p className="text-red-400 text-sm">{createPlaylistError}</p>
@@ -1247,6 +1714,123 @@ const Dashboard = () => {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Access Management Modal */}
+      {showAccessModal && selectedPlaylist && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-700 rounded-lg p-6 w-full max-w-3xl">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Zarządzanie dostępem do playlisty</h2>
+              <button
+                onClick={() => setShowAccessModal(false)}
+                className="p-1 text-gray-400 hover:text-white transition"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              {/* Privacy settings */}
+              <div className="bg-gray-600 p-4 rounded-lg">
+                <h3 className="text-lg font-medium mb-3">Ustawienia prywatności</h3>
+                
+                <div className="space-y-2">
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="modalIsPrivate"
+                      checked={selectedPlaylist.isPrivate}
+                      onChange={() => togglePlaylistPrivacy()}
+                      className="mr-2 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <label htmlFor="modalIsPrivate" className="text-sm font-medium text-gray-300">
+                      Playlista prywatna
+                    </label>
+                  </div>
+                  
+                  {selectedPlaylist.isPrivate && (
+                    <div className="flex items-center ml-6">
+                      <input
+                        type="checkbox"
+                        id="modalAllowFriendsAccess"
+                        checked={selectedPlaylist.allowFriendsAccess}
+                        onChange={() => toggleFriendsAccess()}
+                        className="mr-2 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <label htmlFor="modalAllowFriendsAccess" className="text-sm font-medium text-gray-300">
+                        Zezwalaj na dostęp znajomym
+                      </label>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Users with access */}
+              {selectedPlaylist.isPrivate && (
+                <div className="bg-gray-600 p-4 rounded-lg">
+                  <h3 className="text-lg font-medium mb-3">Użytkownicy z dostępem</h3>
+                  
+                  {loadingAccess ? (
+                    <div className="flex justify-center py-4">
+                      <div className="animate-spin h-8 w-8 border-2 border-blue-500 rounded-full border-t-transparent"></div>
+                    </div>
+                  ) : usersWithAccess.length === 0 ? (
+                    <p className="text-gray-400 text-center py-2">Brak użytkowników z indywidualnym dostępem</p>
+                  ) : (
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {usersWithAccess.map((user: any) => (
+                        <div key={user.id} className="flex justify-between items-center p-2 bg-gray-700 rounded">
+                          <span>{user.nick}</span>
+                          <button
+                            onClick={() => revokeAccess(user.id)}
+                            className="p-1 text-red-400 hover:text-red-300 transition"
+                            title="Usuń dostęp"
+                          >
+                            <X size={18} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Available friends */}
+              {selectedPlaylist.isPrivate && (
+                <div className="bg-gray-600 p-4 rounded-lg">
+                  <h3 className="text-lg font-medium mb-3">Twoi znajomi</h3>
+                  
+                  {loadingFriends ? (
+                    <div className="flex justify-center py-4">
+                      <div className="animate-spin h-8 w-8 border-2 border-blue-500 rounded-full border-t-transparent"></div>
+                    </div>
+                  ) : availableFriends.length === 0 ? (
+                    <p className="text-gray-400 text-center py-2">Nie masz znajomych, którym możesz udostępnić playlistę</p>
+                  ) : (
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {availableFriends.map((friend: any) => (
+                        <div key={friend.id} className="flex justify-between items-center p-2 bg-gray-700 rounded">
+                          <span>{friend.nick}</span>
+                          {usersWithAccess.some((u: any) => u.id === friend.id) ? (
+                            <span className="text-xs text-green-400">Ma dostęp</span>
+                          ) : (
+                            <button
+                              onClick={() => grantAccess(friend.id)}
+                              className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                            >
+                              Daj dostęp
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
